@@ -1,4 +1,4 @@
-# Productivity OS v13
+# Productivity OS Deploy Version
 
 Static frontend + Supabase sync version. You do not need to connect a framework in Supabase; run the SQL directly in SQL Editor after creating the Supabase project.
 
