@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>All-in-One Productivity OS</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-main">
+          <div class="brand-mark">OS</div>
+          <div class="brand-copy">
+            <h1>Productivity OS</h1>
+            <p>Research · Study · Capture</p>
+          </div>
+        </div>
+        <button id="sidebarToggle" class="icon-btn sidebar-toggle" type="button" aria-label="사이드바 접기" title="사이드바 접기"></button>
+      </div>
+      <nav id="nav"></nav>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">All-in-one control panel</p>
+          <h2 id="pageTitle">Dashboard</h2>
+        </div>
+        <div class="top-actions">
+          <button id="themeToggle" class="secondary ghost-top" type="button">Dark mode</button>
+          <div class="auth-cluster" aria-label="Database sync controls">
+            <span id="syncStatus" class="sync-status" data-tone="neutral">DB 확인 중</span>
+            <span id="userLabel" class="user-label">Local only</span>
+            <button id="syncNowBtn" class="secondary ghost-top" type="button" hidden>Sync</button>
+            <button id="authOpenBtn" class="secondary" type="button">Sign in</button>
+            <button id="signOutBtn" class="secondary ghost-top" type="button" hidden>Sign out</button>
+          </div>
+          <details class="backup-menu">
+            <summary class="secondary ghost-top">Backup</summary>
+            <div class="backup-popover">
+              <button id="exportBtn" class="secondary" type="button">JSON Export</button>
+              <label class="secondary import-label">
+                JSON Import
+                <input id="importFile" type="file" accept="application/json" hidden />
+              </label>
+            </div>
+          </details>
+        </div>
+      </header>
+
+      <section id="content"></section>
+    </main>
+  </div>
+
+  <template id="dashboardTemplate">
+    <section class="grid stats-grid" id="statsGrid"></section>
+    <section class="grid two-col">
+      <div class="panel clickable-panel" id="researchStudyPanel" role="button" tabindex="0" data-dashboard-link="study">
+        <div class="panel-header">
+          <h3>이번 주 연구 공부</h3>
+          <span class="muted">클릭하면 Study Plan으로 이동</span>
+        </div>
+        <div id="researchStudySummary"></div>
+      </div>
+      <div class="panel clickable-panel" id="todayActionsPanel" role="button" tabindex="0" data-dashboard-link="tasks">
+        <div class="panel-header">
+          <h3>오늘의 실행 후보</h3>
+          <span class="muted">클릭하면 Task Matrix로 이동</span>
+        </div>
+        <div id="todayActions"></div>
+      </div>
+    </section>
+    <section class="panel dashboard-loop-panel">
+      <div class="panel-header">
+        <h3>운영 루프</h3>
+        <span class="muted">시스템의 최소 흐름</span>
+      </div>
+      <div class="flow">
+        <div><strong>1. Capture</strong><span>Brain dump와 ROS Intake에 일단 인입</span></div>
+        <div><strong>2. Queue</strong><span>상태/태그/트랙을 붙여 관리 가능한 작업으로 변환</span></div>
+        <div><strong>3. Execute</strong><span>Daily Execution에서 오늘의 구성만 뽑아 실행</span></div>
+        <div><strong>4. Track</strong><span>공부 시간, ROS 진행, habit 체크를 기록</span></div>
+        <div><strong>5. Review</strong><span>주간 단위로 큰 그림과 우선순위 조정</span></div>
+      </div>
+    </section>
+  </template>
+
+  <template id="brainTemplate">
+    <section class="panel">
+      <div class="panel-header">
+        <h3>Brain Dump Inbox</h3>
+        <span class="muted">정제하지 말고 먼저 저장</span>
+      </div>
+      <form id="brainForm" class="form-grid">
+        <textarea id="brainText" placeholder="링크, 아이디어, 공부하고 싶은 것, 막연한 걱정 등을 그대로 적기" required></textarea>
+        <select id="brainType">
+          <option value="bookmark">Bookmark</option>
+          <option value="idea">Idea</option>
+          <option value="question">Question</option>
+          <option value="worry">Worry</option>
+          <option value="note">Note</option>
+        </select>
+        <input id="brainTag" placeholder="태그 예: HSI, IC, CS, reading" />
+        <button type="submit">저장</button>
+      </form>
+    </section>
+    <section id="brainList" class="list"></section>
+  </template>
+
+  <template id="rosTemplate">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h3>Research Operating System</h3>
+          <p class="section-subtitle">Intake에서 받고, Queue에서 상태 관리하고, Daily Execution에서 오늘 할 일을 구성.</p>
+        </div>
+        <span class="muted">Settings의 태그/옵션이 ROS 입력폼과 상태 선택에 반영됨</span>
+      </div>
+      <section class="grid ros-summary-grid" id="rosSummary"></section>
+      <div class="ros-tabs" id="rosTabs"></div>
+    </section>
+    <section id="rosBody"></section>
+  </template>
+
+  <template id="tasksTemplate">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h3>Eisenhower Task Manager</h3>
+          <p class="section-subtitle">스케줄링이 아니라 항목 관리 중심. 실제 time blocking은 종이 다이어리에서 수행.</p>
+        </div>
+        <span class="muted">area 옵션은 ROS Settings의 Task Areas를 사용</span>
+      </div>
+      <form id="taskForm" class="form-grid compact task-form">
+        <input id="taskTitle" placeholder="작업명 / agenda item" required />
+        <select id="taskArea"></select>
+        <select id="taskPriority">
+          <option value="High">High</option>
+          <option value="Medium" selected>Medium</option>
+          <option value="Low">Low</option>
+        </select>
+        <input id="taskDue" type="date" />
+        <select id="taskQuadrant">
+          <option value="do">중요·긴급</option>
+          <option value="schedule">중요·비긴급</option>
+          <option value="delegate">비중요·긴급</option>
+          <option value="delete">비중요·비긴급</option>
+        </select>
+        <input id="taskSource" placeholder="context / meeting" />
+        <label class="checkbox-inline"><input id="taskFollowUp" type="checkbox" /> Follow-up</label>
+        <textarea id="taskNotes" placeholder="notes / next action"></textarea>
+        <button type="submit">Task 추가</button>
+      </form>
+    </section>
+    <section id="matrix" class="matrix"></section>
+  </template>
+
+  <template id="studyTemplate">
+    <section class="grid study-split">
+      <div class="panel study-section">
+        <div class="panel-header">
+          <div>
+            <h3>Research Core / Support</h3>
+            <p class="section-subtitle">연구 관련 공부. 주간 시간 목표를 명시하고 추적.</p>
+          </div>
+        </div>
+        <form id="researchStudyForm" class="form-grid study-form">
+          <input id="researchStudyTopic" placeholder="예: Palermo High-Speed Interface lecture" required />
+          <select id="researchStudyBucket">
+            <option value="Research-core">Research-core</option>
+            <option value="Research-support">Research-support</option>
+          </select>
+          <select id="researchStudyTrack">
+            <option value="Both">Both tracks</option>
+            <option value="US">US research</option>
+            <option value="KR">Korea research</option>
+          </select>
+          <input id="researchStudyTarget" type="number" min="0" step="0.5" placeholder="주간 목표 h" required />
+          <button type="submit">추가</button>
+        </form>
+        <section id="researchStudyList" class="card-grid"></section>
+      </div>
+
+      <div class="panel study-section">
+        <div class="panel-header">
+          <div>
+            <h3>Exploration / Hobby</h3>
+            <p class="section-subtitle">컴공, 코딩, 선형대수, 양자역학처럼 부담 없이 쌓아두는 영역.</p>
+          </div>
+        </div>
+        <form id="explorationStudyForm" class="form-grid exploration-form">
+          <input id="explorationTopic" placeholder="예: CS / coding / linear algebra" required />
+          <select id="explorationTrack">
+            <option value="Personal">Personal</option>
+            <option value="Both">Both tracks</option>
+            <option value="US">US research</option>
+            <option value="KR">Korea research</option>
+          </select>
+          <input id="explorationTarget" type="number" min="0" step="0.5" placeholder="목표 h, 선택" />
+          <button type="submit">추가</button>
+        </form>
+        <section id="explorationStudyList" class="card-grid"></section>
+      </div>
+    </section>
+  </template>
+
+  <template id="habitsTemplate">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h3>Habit Tracker</h3>
+          <p class="section-subtitle">매달 새 DB를 만들지 않는 캘린더형 체크 시스템.</p>
+        </div>
+        <span class="muted">Month → Week → Day로 drill-down</span>
+      </div>
+    </section>
+    <section class="panel calendar-panel">
+      <div class="calendar-toolbar">
+        <div class="segmented" id="habitModeButtons"></div>
+        <div class="calendar-nav">
+          <button class="small ghost" id="habitPrev" type="button">‹</button>
+          <button class="small ghost" id="habitToday" type="button">Today</button>
+          <button class="small ghost" id="habitNext" type="button">›</button>
+        </div>
+      </div>
+      <div id="habitCalendarTitle" class="calendar-title"></div>
+      <div id="habitCalendar"></div>
+      <div id="habitDayPanel" class="day-detail"></div>
+    </section>
+    <section class="panel habit-control-island">
+      <div class="panel-header">
+        <div>
+          <h3>Habit Controls</h3>
+          <p class="section-subtitle">새 습관 추가와 습관별 요일 커스터마이징.</p>
+        </div>
+        <button id="habitEditBtn" class="icon-btn gear-icon" type="button" title="습관 편집" aria-label="습관 편집">⚙</button>
+      </div>
+      <form id="habitForm" class="habit-inline-form">
+        <input id="habitName" placeholder="새 습관" required />
+        <div class="weekday-toggle-group" id="habitWeekdayPicker" aria-label="습관 요일 선택"></div>
+        <button class="icon-btn add-icon" type="submit" title="습관 추가" aria-label="습관 추가">＋</button>
+      </form>
+    </section>
+  </template>
+
+
+  <template id="algorithmTemplate">
+    <section class="panel full-width-panel algorithm-image-panel">
+      <div class="panel-header">
+        <div>
+          <h3>Execution Algorithm</h3>
+          <p class="section-subtitle">현재는 원본 PNG를 그대로 기준 이미지로 둠. 인터랙티브 편집 UI는 다음 단계에서 별도 설계.</p>
+        </div>
+      </div>
+      <div class="reference-frame">
+        <img class="reference-image algorithm-reference" src="assets/execution_algorithm.png" alt="실행 알고리즘 원본 이미지" />
+      </div>
+    </section>
+  </template>
+
+  <template id="reviewTemplate">
+    <section class="grid two-col">
+      <div class="panel">
+        <div class="panel-header">
+          <h3>Weekly Review</h3>
+          <span class="muted">일요일 또는 월요일 20분</span>
+        </div>
+        <form id="reviewForm" class="review-form">
+          <label>이번 주 완료 / 진전<textarea id="reviewDone"></textarea></label>
+          <label>막힌 것 / 회피한 것<textarea id="reviewBlocked"></textarea></label>
+          <label>다음 주 핵심 3개<textarea id="reviewNext"></textarea></label>
+          <label>시스템 수정점<textarea id="reviewSystem"></textarea></label>
+          <button type="submit">리뷰 저장</button>
+        </form>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <h3>Saved Reviews</h3>
+          <span class="muted">최신순</span>
+        </div>
+        <div id="reviewList" class="list"></div>
+      </div>
+    </section>
+  </template>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="seed-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
