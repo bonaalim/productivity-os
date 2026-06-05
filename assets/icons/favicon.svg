@@ -1,0 +1,38 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- background -->
+  <rect width="512" height="512" rx="112" fill="#0f1117"/>
+
+  <!-- center(256,256), outer dots at r=195 -->
+  <!-- top(256,61) tr(394,118) r(451,256) br(394,394) b(256,451) bl(118,394) l(61,256) tl(118,118) -->
+  <!-- inner endpoints at r=85 (was r=56.5, +20% of gap toward center: 56.5+0.2*(195-56.5)=84.2≈85) -->
+  <!-- r=85: top(256,171) tr(316,196) r(341,256) br(316,316) b(256,341) bl(196,316) l(171,256) tl(196,196) -->
+  <!-- rings: r=85, 57, 28  gap≈28 -->
+
+  <!-- spokes -->
+  <line x1="256" y1="61"  x2="256" y2="171" stroke="#4f8ef7" stroke-width="10.5" stroke-opacity="0.8" stroke-linecap="round"/>
+  <line x1="394" y1="118" x2="316" y2="196" stroke="#7c5cfc" stroke-width="10.5" stroke-opacity="0.8" stroke-linecap="round"/>
+  <line x1="451" y1="256" x2="341" y2="256" stroke="#2dd4bf" stroke-width="10.5" stroke-opacity="0.8" stroke-linecap="round"/>
+  <line x1="394" y1="394" x2="316" y2="316" stroke="#f59e42" stroke-width="10.5" stroke-opacity="0.8" stroke-linecap="round"/>
+  <line x1="256" y1="451" x2="256" y2="341" stroke="#e05c7a" stroke-width="10.5" stroke-opacity="0.8" stroke-linecap="round"/>
+  <line x1="118" y1="394" x2="196" y2="316" stroke="#a3e635" stroke-width="10.5" stroke-opacity="0.8" stroke-linecap="round"/>
+  <line x1="61"  y1="256" x2="171" y2="256" stroke="#fb923c" stroke-width="10.5" stroke-opacity="0.8" stroke-linecap="round"/>
+  <line x1="118" y1="118" x2="196" y2="196" stroke="#38bdf8" stroke-width="10.5" stroke-opacity="0.8" stroke-linecap="round"/>
+
+  <!-- outer dots -->
+  <circle cx="256" cy="61"  r="13" fill="#4f8ef7"/>
+  <circle cx="394" cy="118" r="13" fill="#7c5cfc"/>
+  <circle cx="451" cy="256" r="13" fill="#2dd4bf"/>
+  <circle cx="394" cy="394" r="13" fill="#f59e42"/>
+  <circle cx="256" cy="451" r="13" fill="#e05c7a"/>
+  <circle cx="118" cy="394" r="13" fill="#a3e635"/>
+  <circle cx="61"  cy="256" r="13" fill="#fb923c"/>
+  <circle cx="118" cy="118" r="13" fill="#38bdf8"/>
+
+  <!-- concentric rings: r=85 thin/faint → r=57 mid → r=28 thick/bright -->
+  <circle cx="256" cy="256" r="85" fill="none" stroke="#ffffff" stroke-width="3"  stroke-opacity="0.15"/>
+  <circle cx="256" cy="256" r="57" fill="none" stroke="#ffffff" stroke-width="6"  stroke-opacity="0.3"/>
+  <circle cx="256" cy="256" r="28" fill="none" stroke="#ffffff" stroke-width="10" stroke-opacity="0.55"/>
+
+  <!-- center dot -->
+  <circle cx="256" cy="256" r="15" fill="#ffffff"/>
+</svg>
