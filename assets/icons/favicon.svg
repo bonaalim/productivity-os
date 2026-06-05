@@ -9,14 +9,14 @@
   <!-- rings r=90,60,30 gap=30 -->
 
   <!-- spokes -->
-  <line x1="256" y1="26"  x2="256" y2="166" stroke="#4f8ef7" stroke-width="14" stroke-linecap="round"/>
-  <line x1="418" y1="94"  x2="320" y2="192" stroke="#7c5cfc" stroke-width="14" stroke-linecap="round"/>
-  <line x1="486" y1="256" x2="346" y2="256" stroke="#2dd4bf" stroke-width="14" stroke-linecap="round"/>
-  <line x1="418" y1="418" x2="320" y2="320" stroke="#f59e42" stroke-width="14" stroke-linecap="round"/>
-  <line x1="256" y1="486" x2="256" y2="346" stroke="#e05c7a" stroke-width="14" stroke-linecap="round"/>
-  <line x1="94"  y1="418" x2="192" y2="320" stroke="#a3e635" stroke-width="14" stroke-linecap="round"/>
-  <line x1="26"  y1="256" x2="166" y2="256" stroke="#fb923c" stroke-width="14" stroke-linecap="round"/>
-  <line x1="94"  y1="94"  x2="192" y2="192" stroke="#38bdf8" stroke-width="14" stroke-linecap="round"/>
+  <line x1="256" y1="26"  x2="256" y2="166" stroke="#4f8ef7" stroke-width="18" stroke-linecap="round"/>
+  <line x1="418" y1="94"  x2="320" y2="192" stroke="#7c5cfc" stroke-width="18" stroke-linecap="round"/>
+  <line x1="486" y1="256" x2="346" y2="256" stroke="#2dd4bf" stroke-width="18" stroke-linecap="round"/>
+  <line x1="418" y1="418" x2="320" y2="320" stroke="#f59e42" stroke-width="18" stroke-linecap="round"/>
+  <line x1="256" y1="486" x2="256" y2="346" stroke="#e05c7a" stroke-width="18" stroke-linecap="round"/>
+  <line x1="94"  y1="418" x2="192" y2="320" stroke="#a3e635" stroke-width="18" stroke-linecap="round"/>
+  <line x1="26"  y1="256" x2="166" y2="256" stroke="#fb923c" stroke-width="18" stroke-linecap="round"/>
+  <line x1="94"  y1="94"  x2="192" y2="192" stroke="#38bdf8" stroke-width="18" stroke-linecap="round"/>
 
   <!-- outer dots -->
   <circle cx="256" cy="26"  r="16" fill="#4f8ef7"/>
