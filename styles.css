@@ -751,3 +751,44 @@ body[data-theme="dark"] .icon-btn.trash-icon {
   .auth-cluster { justify-content: flex-start; }
   .backup-popover { right: auto; left: 0; }
 }
+
+/* Responsive form wrapping fix */
+.panel {
+  min-width: 0;
+}
+
+.form-grid {
+  min-width: 0;
+}
+
+.form-grid > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.task-form,
+.ros-intake-form,
+.ros-queue-form,
+.daily-form,
+.ros-weekly-form,
+.ros-question-form {
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
+}
+
+.task-form textarea,
+.ros-intake-form textarea,
+.ros-weekly-form textarea,
+.ros-question-form textarea {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 720px) {
+  .task-form,
+  .ros-intake-form,
+  .ros-queue-form,
+  .daily-form,
+  .ros-weekly-form,
+  .ros-question-form {
+    grid-template-columns: 1fr;
+  }
+}
