@@ -97,8 +97,8 @@ const defaultRosFlow = {
 const pages = [
   { id: "dashboard", title: "Dashboard", icon: "dashboard" },
   { id: "brain", title: "Brain Dump", icon: "cloud" },
+  { id: "tasks", title: "Task Matrix", icon: "matrix" },  
   { id: "ros", title: "Research OS", icon: "terminal" },
-  { id: "tasks", title: "Task Matrix", icon: "matrix" },
   { id: "study", title: "Study Plan", icon: "cap" },
   { id: "habits", title: "Habit Tracker", icon: "habit" },
   { id: "algorithm", title: "Execution Algorithm", icon: "bolt" },
