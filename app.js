@@ -1269,17 +1269,21 @@ function renderResearch() {
   }
   const summary = document.querySelector("#rosSummary");
   summary.innerHTML = [
-    { label: "Daily incomplete", value: getRosDailyIncompleteCount(), sub: "Daily Execution" },
-    { label: "Queue open", value: getQueueOpenCount(), sub: "Queue Tasks" },
-    { label: "Intake active", value: getIntakeOpenCount(), sub: "Intake Log" },
-    { label: "Now questions", value: getNowQuestionCount(), sub: "Questions" },
+    { label: "Daily incomplete", value: getRosDailyIncompleteCount(), sub: "Daily Execution", tab: "daily" },
+    { label: "Queue open", value: getQueueOpenCount(), sub: "Queue Tasks", tab: "queue" },
+    { label: "Intake active", value: getIntakeOpenCount(), sub: "Intake Log", tab: "intake" },
+    { label: "Now questions", value: getNowQuestionCount(), sub: "Questions", tab: "questions" },
   ].map(item => `
-    <div class="stat compact-stat">
+    <div class="stat compact-stat clickable" data-ros-tab-link="${item.tab}" role="button" tabindex="0">
       <div class="label">${item.label}</div>
       <div class="value">${item.value}</div>
-      <div class="stat-hint">${item.sub}</div>
+      <div class="stat-hint">${item.sub}로 이동</div>
     </div>
   `).join("");
+
+  summary.querySelectorAll("[data-ros-tab-link]").forEach(card => {
+    bindKeyboardClick(card, () => setRosTab(card.dataset.rosTabLink));
+  });
 
   const tabs = document.querySelector("#rosTabs");
   tabs.innerHTML = rosTabs.map(tab => `
