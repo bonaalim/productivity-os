@@ -1356,6 +1356,7 @@ function setDayStarterDate(key) {
 function renderDayStarter() {
   const rows = ensureDayStarterRows(currentDayStarterDate);
   document.querySelector("#dsTitle").textContent = formatKoDate(currentDayStarterDate, { year: "numeric", month: "long", day: "numeric", weekday: "long" });
+  document.querySelector("#dsDateInput").value = currentDayStarterDate;
 
   const taskOptions = state.tasks.filter(task => !task.done).map(task => ({ value: `task:${task.id}`, label: task.title }));
   const rosOptions = getOpenQueueTasks().map(task => ({ value: `ros:${task.id}`, label: task.title }));
@@ -1403,6 +1404,17 @@ function bindDayStarterEvents(rows) {
   document.querySelector("#dsToday").addEventListener("click", () => {
     setDayStarterDate(todayKey());
     render();
+  });
+  const dsDateInput = document.querySelector("#dsDateInput");
+  document.querySelector("#dsPickDate").addEventListener("click", () => {
+    if (typeof dsDateInput.showPicker === "function") dsDateInput.showPicker();
+    else dsDateInput.click();
+  });
+  dsDateInput.addEventListener("change", () => {
+    if (dsDateInput.value) {
+      setDayStarterDate(dsDateInput.value);
+      render();
+    }
   });
 
   document.querySelectorAll("[data-ds-pick]").forEach(select => select.addEventListener("change", () => {

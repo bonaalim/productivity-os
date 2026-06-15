@@ -265,6 +265,14 @@
           <button class="small ghost" id="dsPrev" type="button">‹</button>
           <button class="small ghost" id="dsToday" type="button">Today</button>
           <button class="small ghost" id="dsNext" type="button">›</button>
+          <button class="icon-btn calendar-icon" id="dsPickDate" type="button" title="날짜 선택" aria-label="날짜 선택">
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="nav-svg">
+              <rect x="4" y="5.5" width="16" height="14" rx="2"></rect>
+              <path d="M4 9.7h16"></path>
+              <path d="M8 3.5v3.4M16 3.5v3.4"></path>
+            </svg>
+          </button>
+          <input id="dsDateInput" type="date" class="ds-date-input" aria-hidden="true" tabindex="-1" />
         </div>
       </div>
       <div id="dsTitle" class="calendar-title"></div>
