@@ -771,14 +771,16 @@ body[data-theme="dark"] .icon-btn.trash-icon {
 .ros-queue-form,
 .daily-form,
 .ros-weekly-form,
-.ros-question-form {
+.ros-question-form,
+.ros-meeting-form {
   grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
 }
 
 .task-form textarea,
 .ros-intake-form textarea,
 .ros-weekly-form textarea,
-.ros-question-form textarea {
+.ros-question-form textarea,
+.ros-meeting-form textarea {
   grid-column: 1 / -1;
 }
 
@@ -788,7 +790,8 @@ body[data-theme="dark"] .icon-btn.trash-icon {
   .ros-queue-form,
   .daily-form,
   .ros-weekly-form,
-  .ros-question-form {
+  .ros-question-form,
+  .ros-meeting-form {
     grid-template-columns: 1fr;
   }
 }

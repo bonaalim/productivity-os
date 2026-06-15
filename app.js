@@ -111,6 +111,7 @@ const rosTabs = [
   { id: "queue", title: "Queue Tasks" },
   { id: "daily", title: "Daily Execution" },
   { id: "weekly", title: "Weekly Review" },
+  { id: "meetings", title: "Meeting Notes" },
   { id: "questions", title: "Questions" },
   { id: "settings", title: "Settings" },
 ];
@@ -346,6 +347,7 @@ const defaultState = {
     },
     weeklyReviews: rosSeed.weeklyReviews || [],
     questions: rosSeed.questions || [],
+    meetingNotes: rosSeed.meetingNotes || [],
     flow: {
       ...defaultRosFlow,
       ...(rosSeed.flow || {}),
@@ -434,6 +436,7 @@ function normalizeState(input = {}) {
     },
     weeklyReviews: Array.isArray(inputRos.weeklyReviews) ? inputRos.weeklyReviews : base.ros.weeklyReviews,
     questions: Array.isArray(inputRos.questions) ? inputRos.questions : base.ros.questions,
+    meetingNotes: Array.isArray(inputRos.meetingNotes) ? inputRos.meetingNotes : base.ros.meetingNotes,
   };
   ensureRosSettings(output.ros.settings);
   return output;
@@ -1298,6 +1301,7 @@ function renderResearch() {
     queue: renderRosQueue,
     daily: renderRosDaily,
     weekly: renderRosWeekly,
+    meetings: renderRosMeetings,
     questions: renderRosQuestions,
     settings: renderRosSettings,
   };
@@ -1672,6 +1676,24 @@ function openQuestionEditor(index) {
     ],
     onSubmit: values => {
       Object.assign(q, values);
+      saveState();
+      renderResearch();
+    },
+  });
+}
+
+function openMeetingNoteEditor(item) {
+  const settings = state.ros.settings;
+  openEditorModal({
+    title: "Meeting Note 수정",
+    fields: [
+      { name: "date", label: "Date", type: "date", value: item.date || "" },
+      { name: "track", label: "Meeting Type", type: "select", value: item.track || "", options: settings.tracks || [] },
+      { name: "note", label: "Note", type: "textarea", value: item.note || "", full: true },
+      { name: "done", label: "복기 완료", type: "checkbox", value: !!item.done },
+    ],
+    onSubmit: values => {
+      Object.assign(item, values);
       saveState();
       renderResearch();
     },
@@ -2059,6 +2081,36 @@ function renderRosWeekly() {
   </section>`;
 }
 
+function renderRosMeetings() {
+  const settings = state.ros.settings;
+  const rows = [...(state.ros.meetingNotes || [])].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  return `<section class="panel">
+    <div class="panel-header">
+      <div>
+        <h3>Meeting Notes</h3>
+        <p class="section-subtitle">미팅 직후 복기 메모. 날짜/미팅 종류와 자유 서술로 기록.</p>
+      </div>
+      <span class="muted">${rows.length} note</span>
+    </div>
+    <form id="rosMeetingForm" class="form-grid ros-meeting-form">
+      <input id="rosMeetingDate" type="date" value="${escapeHtml(todayKey())}" required />
+      <select id="rosMeetingTrack">${optionList(settings.tracks)}</select>
+      <textarea id="rosMeetingNote" placeholder="미팅 복기 내용"></textarea>
+      <button class="icon-btn add-icon form-add-btn" type="submit" aria-label="미팅 복기 추가" title="미팅 복기 추가">+</button>
+    </form>
+    <div class="list">
+      ${rows.length ? rows.map(item => `<article class="card ${item.done ? "done" : ""}">
+        <div class="card-title"><h4>${escapeHtml(formatDate(item.date))}</h4><span class="chip strong">${escapeHtml(item.track || "")}</span></div>
+        <p>${formatMultiline(item.note)}</p>
+        <div class="actions">
+          <label class="checkbox-inline"><input type="checkbox" data-meeting-done="${escapeHtml(item.id)}" ${item.done ? "checked" : ""} /> 복기 완료</label>
+        </div>
+        ${iconActions("data-meeting-edit", item.id, "data-meeting-delete", item.id)}
+      </article>`).join("") : `<div class="empty">아직 미팅 복기 메모가 없습니다.</div>`}
+    </div>
+  </section>`;
+}
+
 function renderRosQuestions() {
   const settings = state.ros.settings;
   const rows = state.ros.questions || [];
@@ -2391,6 +2443,39 @@ function bindRosEvents() {
     const index = Number(btn.dataset.rosWeeklyDelete);
     if (!askDelete(state.ros.weeklyReviews[index]?.objective || "Weekly review")) return;
     state.ros.weeklyReviews.splice(index, 1);
+    saveState();
+    renderResearch();
+  }));
+
+  const meetingForm = document.querySelector("#rosMeetingForm");
+  if (meetingForm) {
+    meetingForm.addEventListener("submit", event => {
+      event.preventDefault();
+      state.ros.meetingNotes.unshift({
+        id: makeId("meeting"),
+        date: document.querySelector("#rosMeetingDate").value || todayKey(),
+        track: document.querySelector("#rosMeetingTrack").value,
+        note: document.querySelector("#rosMeetingNote").value.trim(),
+        done: false,
+      });
+      saveState();
+      renderResearch();
+    });
+  }
+  document.querySelectorAll("[data-meeting-done]").forEach(input => input.addEventListener("change", () => {
+    const item = state.ros.meetingNotes.find(entry => entry.id === input.dataset.meetingDone);
+    if (item) item.done = input.checked;
+    saveState();
+    renderResearch();
+  }));
+  document.querySelectorAll("[data-meeting-edit]").forEach(btn => btn.addEventListener("click", () => {
+    const item = state.ros.meetingNotes.find(entry => entry.id === btn.dataset.meetingEdit);
+    if (item) openMeetingNoteEditor(item);
+  }));
+  document.querySelectorAll("[data-meeting-delete]").forEach(btn => btn.addEventListener("click", () => {
+    const item = state.ros.meetingNotes.find(entry => entry.id === btn.dataset.meetingDelete);
+    if (!askDelete(formatDate(item?.date) || "Meeting note")) return;
+    state.ros.meetingNotes = state.ros.meetingNotes.filter(entry => entry.id !== btn.dataset.meetingDelete);
     saveState();
     renderResearch();
   }));
