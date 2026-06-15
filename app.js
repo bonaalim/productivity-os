@@ -794,6 +794,7 @@ function renderNav() {
 }
 
 function render() {
+  if (syncRosQueueToTaskMatrix()) saveState();
   const versionEl = document.querySelector("#appVersion");
   if (versionEl) versionEl.textContent = APP_VERSION;
   applyTheme();
@@ -1021,6 +1022,73 @@ const quadrants = {
   delegate: { title: "➡️ 중요하지 않지만 긴급함", desc: "빨리 처리해야 하지만 큰 가치는 낮음: 과제 방어, 연구실 운영 행정, 미국 준비 등" },
   delete: { title: "💤 중요하지 않고 긴급하지 않음", desc: "휴식/취미/하지 않아도 되는 일: 부차적 자기관리, 미용 관련 등" },
 };
+
+// ROS Queue의 type x nowLater 조합으로 Task Matrix 사분면을 결정.
+// 여기 표만 바꾸면 라우팅 규칙을 조정할 수 있음.
+const ROS_QUEUE_TO_QUADRANT = {
+  "Deep Work": { Now: "do", Later: "schedule" },
+  "Research Support": { Now: "do", Later: "schedule" },
+  Execution: { Now: "delegate", Later: "delete" },
+  Operations: { Now: "delegate", Later: "delete" },
+};
+
+function routeRosToQuadrant(queueTask) {
+  return ROS_QUEUE_TO_QUADRANT[queueTask.type]?.[queueTask.nowLater] || "schedule";
+}
+
+const ROS_TOPIC_TO_TASK_AREA = {
+  General: "Productivity",
+  Research: "Research",
+  Study: "Study",
+  Admin: "Admin",
+};
+
+function rosTopicToTaskArea(topic) {
+  const taskAreas = state.ros.settings.taskAreas || [];
+  if (taskAreas.includes(topic)) return topic;
+  return ROS_TOPIC_TO_TASK_AREA[topic] || taskAreas[0] || "Research";
+}
+
+// ROS Queue Tasks를 Task Matrix에 동기화. sourceRosId로 자동 생성 항목을 추적해
+// 재실행해도 중복 생성하지 않고, Queue 옵션 변경 시 사분면만 이동시킴.
+function syncRosQueueToTaskMatrix() {
+  let changed = false;
+  const queueTasks = state.ros.queueTasks || [];
+  const queueIds = new Set(queueTasks.map(task => task.id));
+
+  queueTasks.forEach(queueTask => {
+    const quadrant = routeRosToQuadrant(queueTask);
+    const existing = state.tasks.find(task => task.sourceRosId === queueTask.id);
+    if (existing) {
+      if (existing.quadrant !== quadrant) {
+        existing.quadrant = quadrant;
+        changed = true;
+      }
+    } else {
+      state.tasks.unshift({
+        id: makeId("task"),
+        title: queueTask.title,
+        area: rosTopicToTaskArea(queueTask.topic),
+        priority: "Medium",
+        source: `ROS ${queueTask.id}`,
+        followUp: false,
+        notes: queueTask.nextAction || "",
+        due: queueTask.due || "",
+        quadrant,
+        done: isClosedStatus(queueTask.status),
+        sourceRosId: queueTask.id,
+      });
+      changed = true;
+    }
+  });
+
+  // 출처 ROS Queue 항목이 삭제된 자동 생성 Task는 함께 제거.
+  const before = state.tasks.length;
+  state.tasks = state.tasks.filter(task => !task.sourceRosId || queueIds.has(task.sourceRosId));
+  if (state.tasks.length !== before) changed = true;
+
+  return changed;
+}
 
 function renderTasks() {
   const areaSelect = document.querySelector("#taskArea");
