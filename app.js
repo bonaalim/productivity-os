@@ -108,10 +108,10 @@ const pages = [
 const rosTabs = [
   { id: "overview", title: "Overview" },
   { id: "intake", title: "Intake Log" },
+  { id: "meetings", title: "Meeting Notes" },
   { id: "queue", title: "Queue Tasks" },
   { id: "daily", title: "Daily Execution" },
   { id: "weekly", title: "Weekly Review" },
-  { id: "meetings", title: "Meeting Notes" },
   { id: "questions", title: "Questions" },
   { id: "settings", title: "Settings" },
 ];
