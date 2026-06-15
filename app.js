@@ -1868,7 +1868,7 @@ function openMeetingNoteEditor(item) {
     title: "Meeting Note 수정",
     fields: [
       { name: "date", label: "Date", type: "date", value: item.date || "" },
-      { name: "track", label: "Meeting Type", type: "select", value: item.track || "", options: settings.tracks || [] },
+      { name: "track", label: "Meeting Type", type: "select", value: item.track || "", options: settings.topics || [] },
       { name: "note", label: "Note", type: "textarea", value: item.note || "", full: true },
       { name: "done", label: "복기 완료", type: "checkbox", value: !!item.done },
     ],
@@ -2274,7 +2274,7 @@ function renderRosMeetings() {
     </div>
     <form id="rosMeetingForm" class="form-grid ros-meeting-form">
       <input id="rosMeetingDate" type="date" value="${escapeHtml(todayKey())}" required />
-      <select id="rosMeetingTrack">${optionList(settings.tracks)}</select>
+      <select id="rosMeetingTrack">${optionList(settings.topics)}</select>
       <textarea id="rosMeetingNote" placeholder="미팅 복기 내용"></textarea>
       <button class="icon-btn add-icon form-add-btn" type="submit" aria-label="미팅 복기 추가" title="미팅 복기 추가">+</button>
     </form>
