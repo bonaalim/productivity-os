@@ -100,8 +100,8 @@ const pages = [
   { id: "tasks", title: "Task Matrix", icon: "matrix" },  
   { id: "ros", title: "Research OS", icon: "terminal" },
   { id: "study", title: "Study Plan", icon: "cap" },
+  { id: "dayStarter", title: "Day Starter", icon: "bolt" },
   { id: "habits", title: "Habit Tracker", icon: "habit" },
-  { id: "algorithm", title: "Execution Algorithm", icon: "bolt" },
   { id: "review", title: "Weekly Review", icon: "review" },
 ];
 
@@ -334,6 +334,7 @@ const defaultState = {
   habits: defaultHabits,
   habitLogs: clone(defaultHabitLogs),
   executionMap: clone(defaultExecutionMap),
+  dailyKickoff: {},
   ros: {
     captureInbox: rosSeed.captureInbox || [],
     meetings: rosSeed.meetings || [],
@@ -366,6 +367,7 @@ let currentPage = localStorage.getItem("productivity-os-page") || "dashboard";
 let currentRosTab = localStorage.getItem("productivity-os-ros-tab") || "overview";
 let currentHabitMode = localStorage.getItem("productivity-os-habit-mode") || "month";
 let currentHabitDate = localStorage.getItem("productivity-os-habit-date") || todayKey();
+let currentDayStarterDate = localStorage.getItem("productivity-os-daystarter-date") || todayKey();
 let currentTheme = localStorage.getItem("productivity-os-theme") || "light";
 let sidebarCollapsed = localStorage.getItem("productivity-os-sidebar-collapsed") === "true";
 let rosDisplayPrefs = loadRosDisplayPrefs();
@@ -418,6 +420,7 @@ function normalizeState(input = {}) {
   output.habitLogs = input.habitLogs && typeof input.habitLogs === "object" ? input.habitLogs : clone(base.habitLogs);
 
   output.executionMap = input.executionMap && typeof input.executionMap === "object" ? input.executionMap : clone(base.executionMap);
+  output.dailyKickoff = input.dailyKickoff && typeof input.dailyKickoff === "object" ? input.dailyKickoff : clone(base.dailyKickoff);
 
   const inputRos = input.ros || {};
   output.ros = {
@@ -813,7 +816,7 @@ function render() {
     study: renderStudy,
     tasks: renderTasks,
     habits: renderHabits,
-    algorithm: renderAlgorithm,
+    dayStarter: renderDayStarter,
     ros: renderResearch,
     review: renderReview,
   };
@@ -1330,6 +1333,115 @@ function bindHabitEvents() {
     toggleHabitLog(input.dataset.date, input.dataset.habitCheck, input.checked);
     saveState();
     render();
+  }));
+}
+
+function defaultDayStarterRow() {
+  return { label: "", source: "manual", refId: "", skimStart: "", skimEnd: "", estMin: "", actualMin: "" };
+}
+
+function ensureDayStarterRows(date) {
+  const existing = Array.isArray(state.dailyKickoff[date]) ? state.dailyKickoff[date] : [];
+  if (existing.length !== 4) {
+    state.dailyKickoff[date] = [0, 1, 2, 3].map(i => existing[i] || defaultDayStarterRow());
+  }
+  return state.dailyKickoff[date];
+}
+
+function setDayStarterDate(key) {
+  currentDayStarterDate = key;
+  localStorage.setItem("productivity-os-daystarter-date", key);
+}
+
+function renderDayStarter() {
+  const rows = ensureDayStarterRows(currentDayStarterDate);
+  document.querySelector("#dsTitle").textContent = formatKoDate(currentDayStarterDate, { year: "numeric", month: "long", day: "numeric", weekday: "long" });
+
+  const taskOptions = state.tasks.filter(task => !task.done).map(task => ({ value: `task:${task.id}`, label: task.title }));
+  const rosOptions = getOpenQueueTasks().map(task => ({ value: `ros:${task.id}`, label: task.title }));
+  const rowLabels = ["1", "2", "3", "+"];
+
+  document.querySelector("#dsTable").innerHTML = `<div class="table-wrap"><table class="data-table day-starter-table">
+    <thead><tr><th>#</th><th>Task</th><th>Skimming</th><th>예상 실행 시간</th><th>실제 실행 시간</th></tr></thead>
+    <tbody>
+      ${rows.map((row, index) => {
+        const currentValue = row.source === "manual" ? "manual" : `${row.source}:${row.refId}`;
+        return `<tr>
+        <td>${rowLabels[index]}</td>
+        <td class="wide-cell day-starter-task-cell">
+          <select data-ds-pick="${index}">
+            <option value="manual" ${currentValue === "manual" ? "selected" : ""}>직접 입력</option>
+            ${taskOptions.length ? `<optgroup label="Task Matrix">${taskOptions.map(opt => `<option value="${escapeHtml(opt.value)}" ${currentValue === opt.value ? "selected" : ""}>${escapeHtml(opt.label)}</option>`).join("")}</optgroup>` : ""}
+            ${rosOptions.length ? `<optgroup label="ROS Queue">${rosOptions.map(opt => `<option value="${escapeHtml(opt.value)}" ${currentValue === opt.value ? "selected" : ""}>${escapeHtml(opt.label)}</option>`).join("")}</optgroup>` : ""}
+          </select>
+          <input data-ds-label="${index}" placeholder="작업 설명" value="${escapeHtml(row.label)}" />
+        </td>
+        <td class="day-starter-skim-cell">
+          <input data-ds-skimstart="${index}" type="time" value="${escapeHtml(row.skimStart)}" />
+          <span>–</span>
+          <input data-ds-skimend="${index}" type="time" value="${escapeHtml(row.skimEnd)}" />
+        </td>
+        <td><input data-ds-est="${index}" type="number" min="0" step="5" placeholder="min" value="${escapeHtml(row.estMin)}" /></td>
+        <td><input data-ds-actual="${index}" type="number" min="0" step="5" placeholder="min" value="${escapeHtml(row.actualMin)}" /></td>
+      </tr>`;
+      }).join("")}
+    </tbody>
+  </table></div>`;
+
+  bindDayStarterEvents(rows);
+}
+
+function bindDayStarterEvents(rows) {
+  document.querySelector("#dsPrev").addEventListener("click", () => {
+    setDayStarterDate(toDateKey(addDays(fromDateKey(currentDayStarterDate), -1)));
+    render();
+  });
+  document.querySelector("#dsNext").addEventListener("click", () => {
+    setDayStarterDate(toDateKey(addDays(fromDateKey(currentDayStarterDate), 1)));
+    render();
+  });
+  document.querySelector("#dsToday").addEventListener("click", () => {
+    setDayStarterDate(todayKey());
+    render();
+  });
+
+  document.querySelectorAll("[data-ds-pick]").forEach(select => select.addEventListener("change", () => {
+    const row = rows[Number(select.dataset.dsPick)];
+    const value = select.value;
+    if (value === "manual") {
+      row.source = "manual";
+      row.refId = "";
+    } else {
+      const [source, refId] = value.split(":");
+      row.source = source;
+      row.refId = refId;
+      const pool = source === "task" ? state.tasks : state.ros.queueTasks;
+      const picked = pool.find(item => item.id === refId);
+      if (picked) row.label = picked.title;
+    }
+    saveState();
+    renderDayStarter();
+  }));
+
+  document.querySelectorAll("[data-ds-label]").forEach(input => input.addEventListener("change", () => {
+    rows[Number(input.dataset.dsLabel)].label = input.value.trim();
+    saveState();
+  }));
+  document.querySelectorAll("[data-ds-skimstart]").forEach(input => input.addEventListener("change", () => {
+    rows[Number(input.dataset.dsSkimstart)].skimStart = input.value;
+    saveState();
+  }));
+  document.querySelectorAll("[data-ds-skimend]").forEach(input => input.addEventListener("change", () => {
+    rows[Number(input.dataset.dsSkimend)].skimEnd = input.value;
+    saveState();
+  }));
+  document.querySelectorAll("[data-ds-est]").forEach(input => input.addEventListener("change", () => {
+    rows[Number(input.dataset.dsEst)].estMin = input.value;
+    saveState();
+  }));
+  document.querySelectorAll("[data-ds-actual]").forEach(input => input.addEventListener("change", () => {
+    rows[Number(input.dataset.dsActual)].actualMin = input.value;
+    saveState();
   }));
 }
 
@@ -2636,10 +2748,6 @@ function renderAlgorithmNode(node, depth = 0, root = false) {
     </div>
     ${children.length ? `<div class="mind-children">${children.map(child => renderAlgorithmNode(child, depth + 1, false)).join("")}</div>` : ""}
   </div>`;
-}
-
-function renderAlgorithm() {
-  // v9: 원본 PNG만 표시. 편집 UI는 의도적으로 비활성화.
 }
 
 function renderReview() {

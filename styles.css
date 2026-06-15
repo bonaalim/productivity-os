@@ -309,6 +309,10 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent-soft
 }
 .data-table tr:last-child td { border-bottom: 0; }
 .wide-cell { min-width: 220px; max-width: 520px; line-height: 1.45; }
+.day-starter-table { min-width: 760px; }
+.day-starter-task-cell { display: grid; gap: 6px; }
+.day-starter-skim-cell { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.day-starter-skim-cell input[type="time"] { min-width: 0; }
 .compact-table .data-table { min-width: 0; }
 .plain-list { margin: 0; padding-left: 20px; color: var(--ink); line-height: 1.7; }
 .sheet-note {

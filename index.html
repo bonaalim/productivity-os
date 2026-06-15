@@ -254,7 +254,23 @@
   </template>
 
 
-  <template id="algorithmTemplate">
+  <template id="dayStarterTemplate">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h3>Day Starter</h3>
+          <p class="section-subtitle">Three Things + Skimming. 오늘의 Big 3와 잡무를 정리하고 스키밍/실행 시간을 기록.</p>
+        </div>
+        <div class="calendar-nav">
+          <button class="small ghost" id="dsPrev" type="button">‹</button>
+          <button class="small ghost" id="dsToday" type="button">Today</button>
+          <button class="small ghost" id="dsNext" type="button">›</button>
+        </div>
+      </div>
+      <div id="dsTitle" class="calendar-title"></div>
+      <div id="dsTable"></div>
+    </section>
+
     <section class="panel full-width-panel algorithm-image-panel">
       <div class="panel-header">
         <div>
