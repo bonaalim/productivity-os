@@ -444,8 +444,20 @@ function normalizeState(input = {}) {
     questions: Array.isArray(inputRos.questions) ? inputRos.questions : base.ros.questions,
     meetingNotes: Array.isArray(inputRos.meetingNotes) ? inputRos.meetingNotes : base.ros.meetingNotes,
   };
+  ensureItemIds(output.ros.questions, "question");
+  ensureItemIds(output.ros.weeklyReviews, "weekly");
+  ensureItemIds(output.ros.daily.deepWork, "daily");
+  ensureItemIds(output.ros.daily.processing, "daily");
   ensureRosSettings(output.ros.settings);
   return output;
+}
+
+// id가 없는 기존 항목에 안정적인 id를 한 번 백필. index 참조 시절 데이터와 호환.
+function ensureItemIds(list, prefix) {
+  if (!Array.isArray(list)) return;
+  list.forEach(item => {
+    if (item && !item.id) item.id = makeId(prefix);
+  });
 }
 
 function mergeLegacyIntake(inputRos) {
@@ -793,6 +805,15 @@ function getDailyWorkItems() {
 
 function getRosDailyIncompleteCount() {
   return getDailyWorkItems().filter(item => !isClosedStatus(item.status)).length;
+}
+
+// daily 항목을 id로 찾아 그 항목과 소속 섹션(deepWork/processing)을 반환.
+function findDailyEntry(id) {
+  for (const section of ["deepWork", "processing"]) {
+    const item = (state.ros.daily?.[section] || []).find(entry => entry.id === id);
+    if (item) return { section, item };
+  }
+  return { section: null, item: null };
 }
 
 function getQueueOpenCount() {
@@ -1846,8 +1867,8 @@ function openQueueEditor(task) {
   });
 }
 
-function openDailyEditor(section, index) {
-  const item = state.ros.daily[section]?.[index];
+function openDailyEditor(id) {
+  const { section, item } = findDailyEntry(id);
   if (!item) return;
   const statusOptions = state.ros.settings.statuses || ["Todo", "Doing", "Waiting", "Done", "Dropped"];
   openEditorModal({
@@ -1871,7 +1892,7 @@ function openDailyEditor(section, index) {
         action: values.action.trim(),
       });
       if (values.section !== section) {
-        state.ros.daily[section].splice(index, 1);
+        state.ros.daily[section] = state.ros.daily[section].filter(entry => entry.id !== item.id);
         if (!state.ros.daily[values.section]) state.ros.daily[values.section] = [];
         state.ros.daily[values.section].push(item);
       }
@@ -1881,8 +1902,8 @@ function openDailyEditor(section, index) {
   });
 }
 
-function openWeeklyEditor(index) {
-  const row = state.ros.weeklyReviews[index];
+function openWeeklyEditor(id) {
+  const row = state.ros.weeklyReviews.find(entry => entry.id === id);
   if (!row) return;
   openEditorModal({
     title: "ROS Weekly Review 수정",
@@ -1901,8 +1922,8 @@ function openWeeklyEditor(index) {
   });
 }
 
-function openQuestionEditor(index) {
-  const q = state.ros.questions[index];
+function openQuestionEditor(id) {
+  const q = state.ros.questions.find(entry => entry.id === id);
   if (!q) return;
   const settings = state.ros.settings;
   openEditorModal({
@@ -2254,7 +2275,7 @@ function renderRosDaily() {
         </div>
       </div>
       <div class="list">
-        ${deepRows.length ? deepRows.map((item, index) => renderDailyCard(item, index, "deepWork")).join("") : `<div class="empty">Deep Work 항목 없음</div>`}
+        ${deepRows.length ? deepRows.map(item => renderDailyCard(item, "deepWork")).join("") : `<div class="empty">Deep Work 항목 없음</div>`}
       </div>
     </div>
 
@@ -2264,16 +2285,16 @@ function renderRosDaily() {
         <span class="muted">처리형 작업</span>
       </div>
       <div class="list">
-        ${processingRows.length ? processingRows.map((item, index) => renderDailyCard(item, index, "processing")).join("") : `<div class="empty">Processing 항목 없음</div>`}
+        ${processingRows.length ? processingRows.map(item => renderDailyCard(item, "processing")).join("") : `<div class="empty">Processing 항목 없음</div>`}
       </div>
     </div>
   </section>`;
 }
 
-function renderDailyCard(item, index, section) {
+function renderDailyCard(item, section) {
   const title = item.title || item.item || item.action || "Untitled";
   const statusOptions = state.ros.settings.statuses || ["Todo", "Doing", "Waiting", "Done", "Dropped"];
-  const key = `${section}:${index}`;
+  const key = item.id;
   return `<article class="card ${isClosedStatus(item.status) ? "done" : ""}">
     <div class="card-title">
       <h4>${escapeHtml(title)}</h4>
@@ -2314,12 +2335,12 @@ function renderRosWeekly() {
       <button class="icon-btn add-icon form-add-btn" type="submit" aria-label="Review 추가" title="Review 추가">+</button>
     </form>
     <div class="list">
-      ${rows.length ? rows.map((row, index) => `<article class="card">
+      ${rows.length ? rows.map(row => `<article class="card">
         <div class="card-title"><h4>${escapeHtml(row.weekStart || "No week")}</h4><span class="chip strong">Weekly</span></div>
         <p><strong>Objective</strong><br>${formatMultiline(row.objective)}</p>
         <p><strong>Top Outcomes</strong><br>${formatMultiline(row.topOutcomes)}</p>
         <p><strong>Risks</strong><br>${formatMultiline(row.risks)}</p>
-        ${iconActions("data-ros-weekly-edit", index, "data-ros-weekly-delete", index)}
+        ${iconActions("data-ros-weekly-edit", row.id, "data-ros-weekly-delete", row.id)}
       </article>`).join("") : `<div class="empty">ROS weekly review가 없습니다.</div>`}
     </div>
   </section>`;
@@ -2376,12 +2397,12 @@ function renderRosQuestions() {
       <button class="icon-btn add-icon form-add-btn" type="submit" aria-label="Question 추가" title="Question 추가">+</button>
     </form>
     <div class="list">
-      ${rows.length ? rows.map((q, index) => `<article class="card ${isClosedStatus(q.status) ? "done" : ""}">
+      ${rows.length ? rows.map(q => `<article class="card ${isClosedStatus(q.status) ? "done" : ""}">
         <div class="card-title"><h4>${escapeHtml(q.question)}</h4><span class="chip strong">${escapeHtml(q.nowLater || "Later")}</span></div>
         <div class="meta"><span class="chip">${escapeHtml(q.created || "No date")}</span><span class="chip">${escapeHtml(q.relatedTaskId || "No task")}</span><span class="chip">${escapeHtml(q.timeboxMin || "No timebox")}</span></div>
         <p><strong>Why</strong><br>${formatMultiline(q.why)}</p>
         <p><strong>Outcome</strong><br>${formatMultiline(q.notesOutcome)}</p>
-        ${iconActions("data-ros-question-edit", index, "data-ros-question-delete", index)}
+        ${iconActions("data-ros-question-edit", q.id, "data-ros-question-delete", q.id)}
       </article>`).join("") : `<div class="empty">현재 입력된 질문 백로그가 없습니다.</div>`}
     </div>
   </section>`;
@@ -2465,6 +2486,7 @@ function addQueueTaskToDaily(taskId, section) {
   const task = state.ros.queueTasks.find(item => item.id === taskId);
   if (!task) return;
   const dailyItem = {
+    id: makeId("daily"),
     slot: (state.ros.daily[section] || []).length + 1,
     taskId: task.id,
     title: task.title,
@@ -2605,10 +2627,8 @@ function bindRosEvents() {
 
   document.querySelectorAll("[data-ros-daily-status]").forEach(select => {
     select.addEventListener("change", () => {
-      const [section, indexText] = select.dataset.rosDailyStatus.split(":");
-      const index = Number(indexText);
-      const list = state.ros.daily[section];
-      if (list?.[index]) list[index].status = select.value;
+      const { item } = findDailyEntry(select.dataset.rosDailyStatus);
+      if (item) item.status = select.value;
       saveState();
       renderResearch();
     });
@@ -2616,18 +2636,16 @@ function bindRosEvents() {
 
   document.querySelectorAll("[data-ros-daily-edit]").forEach(btn => {
     btn.addEventListener("click", () => {
-      const [section, indexText] = btn.dataset.rosDailyEdit.split(":");
-      openDailyEditor(section, Number(indexText));
+      openDailyEditor(btn.dataset.rosDailyEdit);
     });
   });
 
   document.querySelectorAll("[data-ros-daily-delete]").forEach(btn => {
     btn.addEventListener("click", () => {
-      const [section, indexText] = btn.dataset.rosDailyDelete.split(":");
-      const index = Number(indexText);
-      const list = state.ros.daily[section];
-      if (!askDelete(list?.[index]?.title || "Daily 항목")) return;
-      if (list) list.splice(index, 1);
+      const { section, item } = findDailyEntry(btn.dataset.rosDailyDelete);
+      if (!section) return;
+      if (!askDelete(item?.title || "Daily 항목")) return;
+      state.ros.daily[section] = state.ros.daily[section].filter(entry => entry.id !== item.id);
       saveState();
       renderResearch();
     });
@@ -2648,6 +2666,7 @@ function bindRosEvents() {
       } else if (manualTitle) {
         if (!state.ros.daily[section]) state.ros.daily[section] = [];
         state.ros.daily[section].push({
+          id: makeId("daily"),
           slot: state.ros.daily[section].length + 1,
           taskId: "",
           title: manualTitle,
@@ -2667,6 +2686,7 @@ function bindRosEvents() {
     weeklyForm.addEventListener("submit", event => {
       event.preventDefault();
       state.ros.weeklyReviews.unshift({
+        id: makeId("weekly"),
         weekStart: document.querySelector("#rosWeeklyStart").value || todayKey(),
         objective: document.querySelector("#rosWeeklyObjective").value.trim(),
         topOutcomes: document.querySelector("#rosWeeklyOutcomes").value.trim(),
@@ -2681,12 +2701,13 @@ function bindRosEvents() {
     });
   }
   document.querySelectorAll("[data-ros-weekly-edit]").forEach(btn => btn.addEventListener("click", () => {
-    openWeeklyEditor(Number(btn.dataset.rosWeeklyEdit));
+    openWeeklyEditor(btn.dataset.rosWeeklyEdit);
   }));
   document.querySelectorAll("[data-ros-weekly-delete]").forEach(btn => btn.addEventListener("click", () => {
-    const index = Number(btn.dataset.rosWeeklyDelete);
-    if (!askDelete(state.ros.weeklyReviews[index]?.objective || "Weekly review")) return;
-    state.ros.weeklyReviews.splice(index, 1);
+    const id = btn.dataset.rosWeeklyDelete;
+    const row = state.ros.weeklyReviews.find(entry => entry.id === id);
+    if (!askDelete(row?.objective || "Weekly review")) return;
+    state.ros.weeklyReviews = state.ros.weeklyReviews.filter(entry => entry.id !== id);
     saveState();
     renderResearch();
   }));
@@ -2729,6 +2750,7 @@ function bindRosEvents() {
     questionForm.addEventListener("submit", event => {
       event.preventDefault();
       state.ros.questions.unshift({
+        id: makeId("question"),
         created: todayKey(),
         question: document.querySelector("#rosQuestionText").value.trim(),
         nowLater: document.querySelector("#rosQuestionNowLater").value,
@@ -2745,12 +2767,13 @@ function bindRosEvents() {
     });
   }
   document.querySelectorAll("[data-ros-question-edit]").forEach(btn => btn.addEventListener("click", () => {
-    openQuestionEditor(Number(btn.dataset.rosQuestionEdit));
+    openQuestionEditor(btn.dataset.rosQuestionEdit);
   }));
   document.querySelectorAll("[data-ros-question-delete]").forEach(btn => btn.addEventListener("click", () => {
-    const index = Number(btn.dataset.rosQuestionDelete);
-    if (!askDelete(state.ros.questions[index]?.question || "Question")) return;
-    state.ros.questions.splice(index, 1);
+    const id = btn.dataset.rosQuestionDelete;
+    const q = state.ros.questions.find(entry => entry.id === id);
+    if (!askDelete(q?.question || "Question")) return;
+    state.ros.questions = state.ros.questions.filter(entry => entry.id !== id);
     saveState();
     renderResearch();
   }));
