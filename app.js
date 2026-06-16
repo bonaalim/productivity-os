@@ -1408,10 +1408,14 @@ function renderDayStarter() {
   document.querySelector("#dsTitle").textContent = formatKoDate(currentDayStarterDate, { year: "numeric", month: "long", day: "numeric", weekday: "long" });
   document.querySelector("#dsDateInput").value = currentDayStarterDate;
 
-  const taskOptions = state.tasks.filter(task => !task.done).map(task => ({ value: `task:${task.id}`, label: task.title }));
+  const dailyRosIds = new Set(getDailyWorkItems().map(item => item.taskId).filter(Boolean));
+  const taskOptions = state.tasks.filter(task => !task.done).map(task => {
+    const inDaily = task.sourceRosId && dailyRosIds.has(task.sourceRosId);
+    return { value: `task:${task.id}`, label: `${inDaily ? "🔬 " : ""}${task.title}` };
+  });
   const rowLabels = ["1", "2", "3", "+"];
 
-  document.querySelector("#dsTable").innerHTML = `<div class="table-wrap"><table class="data-table day-starter-table">
+  document.querySelector("#dsTable").innerHTML = `${dailyRosIds.size ? `<p class="section-subtitle ds-ros-hint">🔬 = 오늘 ROS Daily Execution에 잡아둔 연구 항목</p>` : ""}<div class="table-wrap"><table class="data-table day-starter-table">
     <thead><tr><th>#</th><th>Task</th><th>Skimming</th><th>예상 실행 시간</th><th>실제 실행 시간</th></tr></thead>
     <tbody>
       ${rows.map((row, index) => {
