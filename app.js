@@ -933,7 +933,7 @@ function renderDashboard() {
   const studyPanel = document.querySelector("#researchStudyPanel");
   bindKeyboardClick(studyPanel, () => setPage("study"));
   const todayActionsPanel = document.querySelector("#todayActionsPanel");
-  if (todayActionsPanel) bindKeyboardClick(todayActionsPanel, () => setPage("tasks"));
+  if (todayActionsPanel) bindKeyboardClick(todayActionsPanel, () => setPage("dayStarter"));
 
   const researchStudies = state.studies.filter(s => s.bucket !== "Exploration");
   document.querySelector("#researchStudySummary").innerHTML = researchStudies.length ? researchStudies.slice(0, 4).map(item => {

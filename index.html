@@ -71,19 +71,19 @@
   <template id="dashboardTemplate">
     <section class="grid stats-grid" id="statsGrid"></section>
     <section class="grid two-col">
+      <div class="panel clickable-panel" id="todayActionsPanel" role="button" tabindex="0" data-dashboard-link="dayStarter">
+        <div class="panel-header">
+          <h3>오늘의 실행 후보</h3>
+          <span class="muted">클릭하면 Day Starter로 이동</span>
+        </div>
+        <div id="todayActions"></div>
+      </div>
       <div class="panel clickable-panel" id="researchStudyPanel" role="button" tabindex="0" data-dashboard-link="study">
         <div class="panel-header">
           <h3>이번 주 연구 공부</h3>
           <span class="muted">클릭하면 Study Plan으로 이동</span>
         </div>
         <div id="researchStudySummary"></div>
-      </div>
-      <div class="panel clickable-panel" id="todayActionsPanel" role="button" tabindex="0" data-dashboard-link="tasks">
-        <div class="panel-header">
-          <h3>오늘의 실행 후보</h3>
-          <span class="muted">클릭하면 Task Matrix로 이동</span>
-        </div>
-        <div id="todayActions"></div>
       </div>
     </section>
     <section class="panel dashboard-loop-panel">
