@@ -369,7 +369,10 @@ let currentHabitMode = localStorage.getItem("productivity-os-habit-mode") || "mo
 let currentHabitDate = localStorage.getItem("productivity-os-habit-date") || todayKey();
 let currentDayStarterDate = localStorage.getItem("productivity-os-daystarter-date") || todayKey();
 let currentTheme = localStorage.getItem("productivity-os-theme") || "light";
-let sidebarCollapsed = localStorage.getItem("productivity-os-sidebar-collapsed") === "true";
+const savedSidebarCollapsed = localStorage.getItem("productivity-os-sidebar-collapsed");
+let sidebarCollapsed = savedSidebarCollapsed !== null
+  ? savedSidebarCollapsed === "true"
+  : window.matchMedia("(max-width: 640px)").matches;
 let rosDisplayPrefs = loadRosDisplayPrefs();
 
 function loadRosDisplayPrefs() {
@@ -796,6 +799,22 @@ function renderNav() {
   nav.querySelectorAll("button").forEach(btn => btn.addEventListener("click", () => setPage(btn.dataset.page)));
 }
 
+const bottomNavItems = ["dashboard", "brain", "dayStarter", "habits"];
+
+function renderBottomNav() {
+  const bottomNav = document.querySelector("#bottomNav");
+  if (!bottomNav) return;
+  bottomNav.innerHTML = bottomNavItems.map(id => {
+    const page = pages.find(p => p.id === id);
+    if (!page) return "";
+    return `
+    <button class="bottom-nav-btn ${page.id === currentPage ? "active" : ""}" data-page="${page.id}" title="${escapeHtml(page.title)}" aria-label="${escapeHtml(page.title)}">
+      <span class="nav-icon">${navIconHtml(page.icon)}</span><span class="bottom-nav-label">${escapeHtml(page.title)}</span>
+    </button>`;
+  }).join("");
+  bottomNav.querySelectorAll("button").forEach(btn => btn.addEventListener("click", () => setPage(btn.dataset.page)));
+}
+
 function render() {
   if (syncRosQueueToTaskMatrix()) saveState();
   const versionEl = document.querySelector("#appVersion");
@@ -803,6 +822,7 @@ function render() {
   applyTheme();
   applySidebarState();
   renderNav();
+  renderBottomNav();
   const page = pages.find(p => p.id === currentPage) || pages[0];
   document.querySelector("#pageTitle").textContent = page.title;
   const content = document.querySelector("#content");

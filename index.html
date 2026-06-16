@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>All-in-One Productivity OS</title>
   <meta name="theme-color" content="#0f1117" />
   <meta name="apple-mobile-web-app-title" content="Productivity OS" />
@@ -28,23 +28,18 @@
         <button id="sidebarToggle" class="icon-btn sidebar-toggle" type="button" aria-label="사이드바 접기" title="사이드바 접기"></button>
       </div>
       <nav id="nav"></nav>
-    </aside>
-
-    <main>
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">All-in-one control panel</p>
-          <h2 id="pageTitle">Dashboard</h2>
+      <div class="sidebar-account" aria-label="계정 및 설정">
+        <div class="account-row" aria-label="Database sync controls">
+          <span id="userLabel" class="user-label">Local only</span>
+          <button id="authOpenBtn" class="secondary" type="button">Sign in</button>
+          <button id="signOutBtn" class="secondary ghost-top" type="button" hidden>Sign out</button>
         </div>
-        <div class="top-actions">
+        <div class="account-row">
+          <span id="syncStatus" class="sync-status" data-tone="neutral">DB 확인 중</span>
+          <button id="syncNowBtn" class="secondary ghost-top" type="button" hidden>Sync</button>
+        </div>
+        <div class="account-row account-tools">
           <button id="themeToggle" class="secondary ghost-top" type="button">Dark mode</button>
-          <div class="auth-cluster" aria-label="Database sync controls">
-            <span id="syncStatus" class="sync-status" data-tone="neutral">DB 확인 중</span>
-            <span id="userLabel" class="user-label">Local only</span>
-            <button id="syncNowBtn" class="secondary ghost-top" type="button" hidden>Sync</button>
-            <button id="authOpenBtn" class="secondary" type="button">Sign in</button>
-            <button id="signOutBtn" class="secondary ghost-top" type="button" hidden>Sign out</button>
-          </div>
           <details class="backup-menu">
             <summary class="secondary ghost-top">Backup</summary>
             <div class="backup-popover">
@@ -56,10 +51,21 @@
             </div>
           </details>
         </div>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">All-in-one control panel</p>
+          <h2 id="pageTitle">Dashboard</h2>
+        </div>
       </header>
 
       <section id="content"></section>
     </main>
+
+    <nav id="bottomNav" class="bottom-nav" aria-label="모바일 빠른 이동"></nav>
   </div>
 
   <template id="dashboardTemplate">
