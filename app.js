@@ -948,15 +948,15 @@ function renderDashboard() {
     </div>`;
   }).join("") : `<div class="empty">연구 공부 항목이 없습니다.</div>`;
 
-  const today = state.tasks
-    .filter(t => !t.done && ["do", "schedule"].includes(t.quadrant))
-    .slice(0, 6);
-  document.querySelector("#todayActions").innerHTML = today.length ? today.map(task => `
+  const dayStarterRows = (state.dailyKickoff[todayKey()] || []).filter(row => row.label && row.label.trim());
+  document.querySelector("#todayActions").innerHTML = dayStarterRows.length ? dayStarterRows.map(row => {
+    const skim = row.skimStart || row.skimEnd ? `${row.skimStart || "--:--"} – ${row.skimEnd || "--:--"}` : "";
+    return `
     <div class="card">
-      <div class="card-title"><h4>${escapeHtml(task.title)}</h4><span class="chip">${task.quadrant === "do" ? "Do" : "Schedule"}</span></div>
-      <div class="meta"><span class="chip">${escapeHtml(task.area || "no area")}</span><span class="chip">${formatDate(task.due)}</span></div>
-    </div>
-  `).join("") : `<div class="empty">오늘 바로 볼 실행 후보가 없습니다.</div>`;
+      <div class="card-title"><h4>${escapeHtml(row.label)}</h4>${row.estMin ? `<span class="chip">${escapeHtml(String(row.estMin))}분</span>` : ""}</div>
+      ${skim ? `<div class="meta"><span class="chip">Skim ${escapeHtml(skim)}</span></div>` : ""}
+    </div>`;
+  }).join("") : `<div class="empty">Day Starter에 입력된 오늘 항목이 없습니다.</div>`;
 }
 
 function renderBrain() {
