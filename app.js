@@ -819,6 +819,10 @@ function renderNav() {
 
 const bottomNavItems = ["dashboard", "brain", "dayStarter", "habits"];
 
+function triggerHaptic() {
+  if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(12);
+}
+
 function renderBottomNav() {
   const bottomNav = document.querySelector("#bottomNav");
   if (!bottomNav) return;
@@ -830,7 +834,15 @@ function renderBottomNav() {
       <span class="nav-icon">${navIconHtml(page.icon)}</span><span class="bottom-nav-label">${escapeHtml(page.title)}</span>
     </button>`;
   }).join("");
-  bottomNav.querySelectorAll("button").forEach(btn => btn.addEventListener("click", () => setPage(btn.dataset.page)));
+  bottomNav.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("pointerdown", () => btn.classList.add("pressed"));
+    ["pointerup", "pointerleave", "pointercancel"].forEach(evt =>
+      btn.addEventListener(evt, () => btn.classList.remove("pressed")));
+    btn.addEventListener("click", () => {
+      triggerHaptic();
+      setPage(btn.dataset.page);
+    });
+  });
 }
 
 function render() {
