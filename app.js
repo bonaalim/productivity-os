@@ -1409,7 +1409,6 @@ function renderDayStarter() {
   document.querySelector("#dsDateInput").value = currentDayStarterDate;
 
   const taskOptions = state.tasks.filter(task => !task.done).map(task => ({ value: `task:${task.id}`, label: task.title }));
-  const rosOptions = getOpenQueueTasks().map(task => ({ value: `ros:${task.id}`, label: task.title }));
   const rowLabels = ["1", "2", "3", "+"];
 
   document.querySelector("#dsTable").innerHTML = `<div class="table-wrap"><table class="data-table day-starter-table">
@@ -1423,7 +1422,6 @@ function renderDayStarter() {
           <select data-ds-pick="${index}">
             <option value="manual" ${currentValue === "manual" ? "selected" : ""}>직접 입력</option>
             ${taskOptions.length ? `<optgroup label="Task Matrix">${taskOptions.map(opt => `<option value="${escapeHtml(opt.value)}" ${currentValue === opt.value ? "selected" : ""}>${escapeHtml(opt.label)}</option>`).join("")}</optgroup>` : ""}
-            ${rosOptions.length ? `<optgroup label="ROS Queue">${rosOptions.map(opt => `<option value="${escapeHtml(opt.value)}" ${currentValue === opt.value ? "selected" : ""}>${escapeHtml(opt.label)}</option>`).join("")}</optgroup>` : ""}
           </select>
           <input data-ds-label="${index}" placeholder="작업 설명" value="${escapeHtml(row.label)}" />
         </td>
