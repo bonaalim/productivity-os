@@ -693,10 +693,28 @@ function setHabitDate(key) {
   localStorage.setItem("productivity-os-habit-date", key);
 }
 
+function themeIconSvg(symbol) {
+  if (symbol === "sun") {
+    return `<svg viewBox="0 0 24 24" aria-hidden="true" class="nav-svg">
+      <circle cx="12" cy="12" r="4"></circle>
+      <path d="M12 2.5v2.3M12 19.2v2.3M2.5 12h2.3M19.2 12h2.3M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"></path>
+    </svg>`;
+  }
+  return `<svg viewBox="0 0 24 24" aria-hidden="true" class="nav-svg">
+    <path d="M20 14.7A8.2 8.2 0 1 1 9.3 4 6.6 6.6 0 0 0 20 14.7Z"></path>
+  </svg>`;
+}
+
 function applyTheme() {
   document.body.dataset.theme = currentTheme;
   const themeToggle = document.querySelector("#themeToggle");
-  if (themeToggle) themeToggle.textContent = currentTheme === "dark" ? "Light mode" : "Dark mode";
+  if (themeToggle) {
+    const switchToLight = currentTheme === "dark";
+    themeToggle.innerHTML = themeIconSvg(switchToLight ? "sun" : "moon");
+    const label = switchToLight ? "라이트 모드로 전환" : "다크 모드로 전환";
+    themeToggle.setAttribute("aria-label", label);
+    themeToggle.title = label;
+  }
 }
 
 function toggleTheme() {

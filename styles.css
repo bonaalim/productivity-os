@@ -784,14 +784,23 @@ body[data-theme="dark"] .icon-btn.trash-icon {
 }
 .account-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
 }
 .account-row .secondary { flex: 0 0 auto; }
 .account-row .user-label,
 .account-row .sync-status { flex: 1 1 auto; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.account-tools { justify-content: space-between; }
+.account-tools { justify-content: flex-start; }
+.icon-toggle {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+.icon-toggle .nav-svg { width: 20px; height: 20px; }
 .sidebar-account .backup-menu { position: relative; }
 .sidebar-account .backup-popover { top: auto; bottom: calc(100% + 8px); right: 0; left: auto; }
 
@@ -876,3 +885,7 @@ body[data-theme="dark"] .icon-btn.trash-icon {
     grid-template-columns: 1fr;
   }
 }
+
+/* iOS safe-area: keep the brand/toggle clear of the status bar / Dynamic Island */
+.sidebar { padding-top: calc(24px + env(safe-area-inset-top)); }
+#app.sidebar-collapsed .sidebar { padding-top: calc(20px + env(safe-area-inset-top)); }
