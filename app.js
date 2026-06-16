@@ -2038,7 +2038,7 @@ function renderRosIntake() {
   const settings = state.ros.settings;
   const allRows = state.ros.intake || [];
   const rows = rosDisplayPrefs.hideQueuedIntake
-    ? allRows.filter(item => !item.queued)
+    ? allRows.filter(item => !item.queued && !isClosedStatus(item.status))
     : allRows;
   return `<section class="panel">
     <div class="panel-header">
@@ -2065,7 +2065,7 @@ function renderRosIntake() {
         <button class="small ghost ${rosDisplayPrefs.intakeView === "list" ? "active" : ""}" type="button" data-ros-view="intake:list">List</button>
         <button class="small ghost ${rosDisplayPrefs.intakeView === "table" ? "active" : ""}" type="button" data-ros-view="intake:table">Table</button>
       </div>
-      <label class="checkbox-inline filter-check"><input type="checkbox" data-ros-filter="hideQueuedIntake" ${rosDisplayPrefs.hideQueuedIntake ? "checked" : ""} /> Queue로 보낸 항목 숨기기</label>
+      <label class="checkbox-inline filter-check"><input type="checkbox" data-ros-filter="hideQueuedIntake" ${rosDisplayPrefs.hideQueuedIntake ? "checked" : ""} /> Queue로 보냈거나 완료/중단된 항목 숨기기</label>
     </div>
     ${rosDisplayPrefs.intakeView === "table" ? renderIntakeTable(rows) : `<div class="intake-list list">
       ${rows.length ? rows.map(item => renderIntakeCard(item)).join("") : `<div class="empty">표시할 Intake 항목이 없습니다.</div>`}
