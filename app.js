@@ -784,6 +784,13 @@ function formatMultiline(value) {
   return escapeHtml(value || "-").replaceAll("\n", "<br>");
 }
 
+// 메모 텍스트를 HTML로 변환: 이스케이프 후 URL을 클릭 가능한 링크로, 줄바꿈은 <br>.
+function linkifyNotes(value) {
+  return escapeHtml(value || "")
+    .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>')
+    .replaceAll("\n", "<br>");
+}
+
 function formatDate(value) {
   if (!value) return "No due date";
   const date = new Date(value + "T00:00:00");
@@ -1093,6 +1100,7 @@ function renderStudy() {
       track: document.querySelector("#researchStudyTrack").value,
       target: Number(document.querySelector("#researchStudyTarget").value || 0),
       logged: 0,
+      notes: document.querySelector("#researchStudyNotes").value.trim(),
     });
     saveState();
     render();
@@ -1107,6 +1115,7 @@ function renderStudy() {
       track: document.querySelector("#explorationTrack").value,
       target: Number(document.querySelector("#explorationTarget").value || 0),
       logged: 0,
+      notes: document.querySelector("#explorationNotes").value.trim(),
     });
     saveState();
     render();
@@ -1139,6 +1148,7 @@ function renderStudyCard(item) {
     <div class="card-title"><h4>${escapeHtml(item.topic)}</h4><span class="chip strong">${escapeHtml(item.bucket)}</span></div>
     <div class="progress"><span style="width:${percent}%"></span></div>
     <div class="meta"><span class="chip">${escapeHtml(item.track)}</span><span class="chip">${logged}/${target}h</span><span class="chip">${percent}%</span></div>
+    ${item.notes ? `<p class="study-notes">${linkifyNotes(item.notes)}</p>` : ""}
     ${iconActions("data-study-edit", item.id, "data-study-delete", item.id)}
   </article>`;
 }
@@ -1904,6 +1914,7 @@ function openStudyEditor(item) {
       { name: "track", label: "Track", type: "select", value: item.track, options: ["Both", "US", "KR", "Personal"] },
       { name: "target", label: "주간 목표 h", type: "number", value: Number(item.target || 0), step: "0.5", min: "0" },
       { name: "logged", label: "이번 주 기록 h", type: "number", value: Number(item.logged || 0), step: "0.5", min: "0" },
+      { name: "notes", label: "메모 / 링크", type: "textarea", value: item.notes || "", full: true },
     ],
     onSubmit: values => {
       item.topic = values.topic.trim() || item.topic;
@@ -1911,6 +1922,7 @@ function openStudyEditor(item) {
       item.track = values.track;
       item.target = Number(values.target || 0);
       item.logged = Number(values.logged || 0);
+      item.notes = values.notes.trim();
       saveState();
       render();
     },

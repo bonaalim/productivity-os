@@ -151,6 +151,8 @@ h2 { margin: 0; font-size: 32px; letter-spacing: -0.04em; }
 .compact { grid-template-columns: minmax(220px, 1fr) 180px 150px 220px auto; }
 .task-form { grid-template-columns: minmax(220px, 1fr) 150px 115px 145px 200px minmax(170px, .8fr) 130px auto; }
 .study-form { grid-template-columns: minmax(220px, 1fr) 160px 160px 130px auto; margin-bottom: 14px; }
+.study-notes { margin-top: 8px; font-size: 13px; line-height: 1.5; opacity: .85; overflow-wrap: anywhere; word-break: break-word; }
+.study-notes a { color: var(--accent, #4c8bf5); }
 .exploration-form { grid-template-columns: minmax(220px, 1fr) 160px 130px auto; margin-bottom: 14px; }
 .habit-form { grid-template-columns: minmax(220px, 1fr) 160px auto; }
 .ros-intake-form { grid-template-columns: 130px 150px minmax(240px, 1fr) 150px 160px 170px 140px 150px; margin-bottom: 16px; }
