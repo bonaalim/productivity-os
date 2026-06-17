@@ -1972,11 +1972,13 @@ function openQueueEditor(task) {
 function openDailyEditor(id) {
   const { section, item } = findDailyEntry(id);
   if (!item) return;
+  const currentDate = currentRosDailyDate;
   const statusOptions = state.ros.settings.statuses || ["Todo", "Doing", "Waiting", "Done", "Dropped"];
   openEditorModal({
     title: "Daily Execution 수정",
     fields: [
       { name: "title", label: "Title", type: "text", value: item.title || item.item || item.action || "", full: true },
+      { name: "execDate", label: "실행 날짜", type: "date", value: currentDate },
       { name: "section", label: "Section", type: "select", value: section, options: [{ value: "deepWork", label: "Deep Work" }, { value: "processing", label: "Processing" }] },
       { name: "status", label: "Status", type: "select", value: item.status || "", options: statusOptions },
       { name: "taskId", label: "Task ID", type: "text", value: item.taskId || "" },
@@ -1993,10 +1995,13 @@ function openDailyEditor(id) {
         oneThing: values.oneThing.trim(),
         action: values.action.trim(),
       });
-      if (values.section !== section) {
-        const bucket = ensureRosDailyBucket();
-        bucket[section] = bucket[section].filter(entry => entry.id !== item.id);
-        bucket[values.section].push(item);
+      const targetDate = values.execDate || currentDate;
+      const targetSection = values.section;
+      if (targetDate !== currentDate || targetSection !== section) {
+        const fromBucket = ensureRosDailyBucket(currentDate);
+        fromBucket[section] = fromBucket[section].filter(entry => entry.id !== item.id);
+        const toBucket = ensureRosDailyBucket(targetDate);
+        toBucket[targetSection].push(item);
       }
       if (item.taskId) applyLinkedDone(item.taskId, isClosedStatus(item.status));
       saveState();
