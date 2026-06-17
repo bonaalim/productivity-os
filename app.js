@@ -274,6 +274,27 @@ function buildDefaultIntake() {
   return [...meetings, ...capture];
 }
 
+function dailyBucketShape(bucket) {
+  const b = bucket && typeof bucket === "object" ? bucket : {};
+  return {
+    deepWork: Array.isArray(b.deepWork) ? b.deepWork : [],
+    processing: Array.isArray(b.processing) ? b.processing : [],
+    anchors: Array.isArray(b.anchors) ? b.anchors : [],
+  };
+}
+
+// ROS daily를 날짜별 버킷 형태 { [dateKey]: {deepWork,processing,anchors} }로 정규화.
+// 레거시(top-level deepWork/processing 배열)는 오늘 날짜 버킷으로 래핑.
+function normalizeRosDaily(input) {
+  const daily = input && typeof input === "object" ? input : {};
+  if (Array.isArray(daily.deepWork) || Array.isArray(daily.processing) || Array.isArray(daily.anchors)) {
+    return { [todayKey()]: dailyBucketShape(daily) };
+  }
+  const output = {};
+  Object.entries(daily).forEach(([date, bucket]) => { output[date] = dailyBucketShape(bucket); });
+  return output;
+}
+
 function buildDefaultHabitLogs(habits) {
   const logs = {};
   const monday = startOfWeek(new Date());
@@ -340,12 +361,7 @@ const defaultState = {
     meetings: rosSeed.meetings || [],
     intake: Array.isArray(rosSeed.intake) ? rosSeed.intake : buildDefaultIntake(),
     queueTasks: rosSeed.queueTasks || [],
-    daily: {
-      deepWork: [],
-      processing: [],
-      anchors: [],
-      ...(rosSeed.daily || {}),
-    },
+    daily: normalizeRosDaily(rosSeed.daily),
     weeklyReviews: rosSeed.weeklyReviews || [],
     questions: rosSeed.questions || [],
     meetingNotes: rosSeed.meetingNotes || [],
@@ -368,6 +384,7 @@ let currentRosTab = localStorage.getItem("productivity-os-ros-tab") || "overview
 let currentHabitMode = localStorage.getItem("productivity-os-habit-mode") || "month";
 let currentHabitDate = localStorage.getItem("productivity-os-habit-date") || todayKey();
 let currentDayStarterDate = localStorage.getItem("productivity-os-daystarter-date") || todayKey();
+let currentRosDailyDate = localStorage.getItem("productivity-os-rosdaily-date") || todayKey();
 let currentTheme = localStorage.getItem("productivity-os-theme") || "light";
 const savedSidebarCollapsed = localStorage.getItem("productivity-os-sidebar-collapsed");
 let sidebarCollapsed = savedSidebarCollapsed !== null
@@ -382,10 +399,11 @@ function loadRosDisplayPrefs() {
       queueView: "list",
       hideQueuedIntake: true,
       hideDoneQueue: true,
+      hideDoneTasks: true,
       ...JSON.parse(localStorage.getItem("productivity-os-ros-display") || "{}"),
     };
   } catch {
-    return { intakeView: "list", queueView: "list", hideQueuedIntake: true, hideDoneQueue: true };
+    return { intakeView: "list", queueView: "list", hideQueuedIntake: true, hideDoneQueue: true, hideDoneTasks: true };
   }
 }
 
@@ -436,18 +454,17 @@ function normalizeState(input = {}) {
     },
     intake: Array.isArray(inputRos.intake) ? inputRos.intake : mergeLegacyIntake(inputRos),
     queueTasks: Array.isArray(inputRos.queueTasks) ? inputRos.queueTasks : base.ros.queueTasks,
-    daily: {
-      ...base.ros.daily,
-      ...(inputRos.daily || {}),
-    },
+    daily: inputRos.daily !== undefined ? normalizeRosDaily(inputRos.daily) : clone(base.ros.daily),
     weeklyReviews: Array.isArray(inputRos.weeklyReviews) ? inputRos.weeklyReviews : base.ros.weeklyReviews,
     questions: Array.isArray(inputRos.questions) ? inputRos.questions : base.ros.questions,
     meetingNotes: Array.isArray(inputRos.meetingNotes) ? inputRos.meetingNotes : base.ros.meetingNotes,
   };
   ensureItemIds(output.ros.questions, "question");
   ensureItemIds(output.ros.weeklyReviews, "weekly");
-  ensureItemIds(output.ros.daily.deepWork, "daily");
-  ensureItemIds(output.ros.daily.processing, "daily");
+  Object.values(output.ros.daily).forEach(bucket => {
+    ensureItemIds(bucket.deepWork, "daily");
+    ensureItemIds(bucket.processing, "daily");
+  });
   ensureRosSettings(output.ros.settings);
   return output;
 }
@@ -792,8 +809,26 @@ function getOpenQueueTasks() {
   return (state.ros?.queueTasks || []).filter(task => !isClosedStatus(task.status));
 }
 
-function getDailyWorkItems() {
-  const daily = state.ros?.daily || {};
+// 특정 날짜의 daily 버킷을 읽기 전용으로 반환(없으면 임시 빈 버킷, state 미변경).
+function readRosDailyBucket(date = currentRosDailyDate) {
+  return state.ros?.daily?.[date] || { deepWork: [], processing: [], anchors: [] };
+}
+
+// 특정 날짜의 daily 버킷을 반환(없으면 생성 후 영속). 쓰기용.
+function ensureRosDailyBucket(date = currentRosDailyDate) {
+  if (!state.ros.daily || typeof state.ros.daily !== "object") state.ros.daily = {};
+  if (!state.ros.daily[date]) state.ros.daily[date] = { deepWork: [], processing: [], anchors: [] };
+  return state.ros.daily[date];
+}
+
+// 모든 날짜 버킷의 daily 항목을 순회 (done 전파용).
+function forEachDailyItem(fn) {
+  Object.values(state.ros.daily || {}).forEach(bucket =>
+    ["deepWork", "processing"].forEach(sec => (bucket?.[sec] || []).forEach(fn)));
+}
+
+function getDailyWorkItems(date = todayKey()) {
+  const daily = readRosDailyBucket(date);
   const deep = (daily.deepWork || [])
     .filter(item => item.title || item.taskId)
     .map(item => ({ ...item, label: item.title, section: "Deep Work" }));
@@ -807,13 +842,31 @@ function getRosDailyIncompleteCount() {
   return getDailyWorkItems().filter(item => !isClosedStatus(item.status)).length;
 }
 
-// daily 항목을 id로 찾아 그 항목과 소속 섹션(deepWork/processing)을 반환.
+// daily 항목을 id로 찾아 그 항목과 소속 섹션(deepWork/processing)을 반환. 현재 네비 날짜 버킷 기준.
 function findDailyEntry(id) {
+  const bucket = readRosDailyBucket();
   for (const section of ["deepWork", "processing"]) {
-    const item = (state.ros.daily?.[section] || []).find(entry => entry.id === id);
+    const item = (bucket[section] || []).find(entry => entry.id === id);
     if (item) return { section, item };
   }
   return { section: null, item: null };
+}
+
+// queueId를 공유 키로 연결된 레코드(ROS Queue / Task Matrix / 모든 날짜의 ROS Daily)의
+// done 상태를 맞춤. 이미 닫힌(Dropped 등) 상태는 보존: done이면 닫혀있을 때 그대로 둠.
+function applyLinkedDone(queueId, done) {
+  const openStatus = state.ros.settings?.statuses?.[0] || "Todo";
+  const syncStatus = (cur, set) => {
+    if (done && !isClosedStatus(cur)) set("Done");
+    else if (!done && isClosedStatus(cur)) set(openStatus);
+  };
+  const q = (state.ros.queueTasks || []).find(t => t.id === queueId);
+  if (q) syncStatus(q.status, s => { q.status = s; });
+  const task = state.tasks.find(t => t.sourceRosId === queueId);
+  if (task) task.done = done;
+  forEachDailyItem(item => {
+    if (item.taskId === queueId) syncStatus(item.status, s => { item.status = s; });
+  });
 }
 
 function getQueueOpenCount() {
@@ -1138,6 +1191,11 @@ function syncRosQueueToTaskMatrix() {
         existing.quadrant = quadrant;
         changed = true;
       }
+      const queueDone = isClosedStatus(queueTask.status);
+      if (existing.done !== queueDone) {
+        existing.done = queueDone;
+        changed = true;
+      }
     } else {
       state.tasks.unshift({
         id: makeId("task"),
@@ -1186,9 +1244,19 @@ function renderTasks() {
     render();
   });
 
+  const hideDoneCheckbox = document.querySelector("#taskHideDone");
+  if (hideDoneCheckbox) {
+    hideDoneCheckbox.checked = rosDisplayPrefs.hideDoneTasks;
+    hideDoneCheckbox.addEventListener("change", () => {
+      rosDisplayPrefs.hideDoneTasks = hideDoneCheckbox.checked;
+      saveRosDisplayPrefs();
+      render();
+    });
+  }
+
   const matrix = document.querySelector("#matrix");
   matrix.innerHTML = Object.entries(quadrants).map(([key, q]) => {
-    const tasks = state.tasks.filter(task => task.quadrant === key);
+    const tasks = state.tasks.filter(task => task.quadrant === key && (!rosDisplayPrefs.hideDoneTasks || !task.done));
     return `<section class="quadrant">
       <h3>${q.title}</h3>
       <p class="q-desc">${q.desc}</p>
@@ -1200,7 +1268,11 @@ function renderTasks() {
 
   matrix.querySelectorAll("[data-task-done]").forEach(btn => btn.addEventListener("click", () => {
     const task = state.tasks.find(t => t.id === btn.dataset.taskDone);
-    if (task) task.done = !task.done;
+    if (task) {
+      const next = !task.done;
+      if (task.sourceRosId) applyLinkedDone(task.sourceRosId, next);
+      else task.done = next;
+    }
     saveState();
     render();
   }));
@@ -1408,7 +1480,16 @@ function bindHabitEvents() {
 }
 
 function defaultDayStarterRow() {
-  return { label: "", source: "manual", refId: "", skimStart: "", skimEnd: "", estMin: "", actualMin: "" };
+  return { label: "", source: "manual", refId: "", skimStart: "", skimEnd: "", estMin: "", actualMin: "", done: false };
+}
+
+// Day Starter 행의 done 표시 상태. task 참조 행은 항상 task.done을 따름(양방향), 그 외는 행 자체 done.
+function dayStarterRowDone(row) {
+  if (row.source === "task" && row.refId) {
+    const task = state.tasks.find(t => t.id === row.refId);
+    if (task) return !!task.done;
+  }
+  return !!row.done;
 }
 
 function ensureDayStarterRows(date) {
@@ -1424,6 +1505,11 @@ function setDayStarterDate(key) {
   localStorage.setItem("productivity-os-daystarter-date", key);
 }
 
+function setRosDailyDate(key) {
+  currentRosDailyDate = key;
+  localStorage.setItem("productivity-os-rosdaily-date", key);
+}
+
 function renderDayStarter() {
   const rows = ensureDayStarterRows(currentDayStarterDate);
   document.querySelector("#dsTitle").textContent = formatKoDate(currentDayStarterDate, { year: "numeric", month: "long", day: "numeric", weekday: "long" });
@@ -1432,17 +1518,19 @@ function renderDayStarter() {
   const dailyRosIds = new Set(getDailyWorkItems().map(item => item.taskId).filter(Boolean));
   const taskOptions = state.tasks.filter(task => !task.done).map(task => {
     const inDaily = task.sourceRosId && dailyRosIds.has(task.sourceRosId);
-    return { value: `task:${task.id}`, label: `${inDaily ? "🔬 " : ""}${task.title}` };
+    return { value: `task:${task.id}`, label: `${inDaily ? "💡 " : ""}${task.title}` };
   });
   const rowLabels = ["1", "2", "3", "+"];
 
-  document.querySelector("#dsTable").innerHTML = `${dailyRosIds.size ? `<p class="section-subtitle ds-ros-hint">🔬 = 오늘 ROS Daily Execution에 잡아둔 연구 항목</p>` : ""}<div class="table-wrap"><table class="data-table day-starter-table">
-    <thead><tr><th>#</th><th>Task</th><th>Skimming</th><th>예상 실행 시간</th><th>실제 실행 시간</th></tr></thead>
+  document.querySelector("#dsTable").innerHTML = `${dailyRosIds.size ? `<p class="section-subtitle ds-ros-hint">💡 = 오늘 ROS Daily Execution에 잡아둔 연구 항목</p>` : ""}<div class="table-wrap"><table class="data-table day-starter-table">
+    <thead><tr><th>#</th><th>Done</th><th>Task</th><th>Skimming</th><th>예상 실행 시간</th><th>실제 실행 시간</th></tr></thead>
     <tbody>
       ${rows.map((row, index) => {
         const currentValue = row.source === "manual" ? "manual" : `${row.source}:${row.refId}`;
-        return `<tr>
+        const rowDone = dayStarterRowDone(row);
+        return `<tr class="${rowDone ? "done" : ""}">
         <td>${rowLabels[index]}</td>
+        <td class="day-starter-done-cell"><input type="checkbox" data-ds-done="${index}" ${rowDone ? "checked" : ""} /></td>
         <td class="wide-cell day-starter-task-cell">
           <select data-ds-pick="${index}">
             <option value="manual" ${currentValue === "manual" ? "selected" : ""}>직접 입력</option>
@@ -1527,6 +1615,20 @@ function bindDayStarterEvents(rows) {
   document.querySelectorAll("[data-ds-actual]").forEach(input => input.addEventListener("change", () => {
     rows[Number(input.dataset.dsActual)].actualMin = input.value;
     saveState();
+  }));
+  document.querySelectorAll("[data-ds-done]").forEach(input => input.addEventListener("change", () => {
+    const row = rows[Number(input.dataset.dsDone)];
+    const checked = input.checked;
+    row.done = checked;
+    if (row.source === "task" && row.refId) {
+      const task = state.tasks.find(t => t.id === row.refId);
+      if (task) {
+        if (task.sourceRosId) applyLinkedDone(task.sourceRosId, checked);
+        else task.done = checked;
+      }
+    }
+    saveState();
+    render();
   }));
 }
 
@@ -1892,10 +1994,11 @@ function openDailyEditor(id) {
         action: values.action.trim(),
       });
       if (values.section !== section) {
-        state.ros.daily[section] = state.ros.daily[section].filter(entry => entry.id !== item.id);
-        if (!state.ros.daily[values.section]) state.ros.daily[values.section] = [];
-        state.ros.daily[values.section].push(item);
+        const bucket = ensureRosDailyBucket();
+        bucket[section] = bucket[section].filter(entry => entry.id !== item.id);
+        bucket[values.section].push(item);
       }
+      if (item.taskId) applyLinkedDone(item.taskId, isClosedStatus(item.status));
       saveState();
       renderResearch();
     },
@@ -2241,19 +2344,34 @@ function renderQueueCard(task) {
 }
 
 function renderRosDaily() {
-  const daily = state.ros.daily;
+  const daily = readRosDailyBucket();
   const deepRows = daily.deepWork || [];
   const processingRows = daily.processing || [];
   const openTasks = getOpenQueueTasks();
+  const incomplete = getDailyWorkItems(currentRosDailyDate).filter(item => !isClosedStatus(item.status)).length;
   return `<section class="grid two-col">
     <div class="panel full-width-panel">
       <div class="panel-header">
         <div>
           <h3>Daily Execution Builder</h3>
-          <p class="section-subtitle">Queue에서 오늘 다룰 항목만 가져와 하루 일과의 재료로 구성. 시간표 자체는 종이 다이어리에서 작성.</p>
+          <p class="section-subtitle">Queue에서 그날 다룰 항목만 가져와 하루 일과의 재료로 구성. 날짜별로 따로 관리됨.</p>
         </div>
-        <span class="muted">${getRosDailyIncompleteCount()} incomplete</span>
+        <div class="calendar-nav">
+          <span class="muted">${incomplete} incomplete</span>
+          <button class="small ghost" id="rdPrev" type="button">‹</button>
+          <button class="small ghost" id="rdToday" type="button">Today</button>
+          <button class="small ghost" id="rdNext" type="button">›</button>
+          <button class="icon-btn calendar-icon" id="rdPickDate" type="button" title="날짜 선택" aria-label="날짜 선택">
+            <svg viewBox="0 0 24 24" aria-hidden="true" class="nav-svg">
+              <rect x="4" y="5.5" width="16" height="14" rx="2"></rect>
+              <path d="M4 9.7h16"></path>
+              <path d="M8 3.5v3.4M16 3.5v3.4"></path>
+            </svg>
+          </button>
+          <input id="rdDateInput" type="date" class="ds-date-input" aria-hidden="true" tabindex="-1" value="${escapeHtml(currentRosDailyDate)}" />
+        </div>
       </div>
+      <div class="calendar-title" id="rdTitle">${escapeHtml(formatKoDate(currentRosDailyDate, { year: "numeric", month: "long", day: "numeric", weekday: "long" }))}</div>
       <form id="rosDailyForm" class="form-grid daily-form">
         <select id="rosDailyTaskSelect">
           <option value="manual">직접 입력</option>
@@ -2485,9 +2603,10 @@ function makeQueueTaskFromIntake(item) {
 function addQueueTaskToDaily(taskId, section) {
   const task = state.ros.queueTasks.find(item => item.id === taskId);
   if (!task) return;
+  const bucket = ensureRosDailyBucket();
   const dailyItem = {
     id: makeId("daily"),
-    slot: (state.ros.daily[section] || []).length + 1,
+    slot: (bucket[section] || []).length + 1,
     taskId: task.id,
     title: task.title,
     oneThing: section === "deepWork" ? task.nextAction || "" : "",
@@ -2495,8 +2614,7 @@ function addQueueTaskToDaily(taskId, section) {
     timeboxHrs: Number(task.effortHrs || 0),
     status: state.ros.settings.statuses[0] || "Todo",
   };
-  if (!state.ros.daily[section]) state.ros.daily[section] = [];
-  state.ros.daily[section].push(dailyItem);
+  bucket[section].push(dailyItem);
 }
 
 function bindRosEvents() {
@@ -2601,7 +2719,10 @@ function bindRosEvents() {
   document.querySelectorAll("[data-ros-queue-status]").forEach(select => {
     select.addEventListener("change", () => {
       const task = state.ros.queueTasks.find(item => item.id === select.dataset.rosQueueStatus);
-      if (task) task.status = select.value;
+      if (task) {
+        task.status = select.value;
+        applyLinkedDone(task.id, isClosedStatus(task.status));
+      }
       saveState();
       renderResearch();
     });
@@ -2628,7 +2749,10 @@ function bindRosEvents() {
   document.querySelectorAll("[data-ros-daily-status]").forEach(select => {
     select.addEventListener("change", () => {
       const { item } = findDailyEntry(select.dataset.rosDailyStatus);
-      if (item) item.status = select.value;
+      if (item) {
+        item.status = select.value;
+        if (item.taskId) applyLinkedDone(item.taskId, isClosedStatus(item.status));
+      }
       saveState();
       renderResearch();
     });
@@ -2645,11 +2769,39 @@ function bindRosEvents() {
       const { section, item } = findDailyEntry(btn.dataset.rosDailyDelete);
       if (!section) return;
       if (!askDelete(item?.title || "Daily 항목")) return;
-      state.ros.daily[section] = state.ros.daily[section].filter(entry => entry.id !== item.id);
+      const bucket = ensureRosDailyBucket();
+      bucket[section] = bucket[section].filter(entry => entry.id !== item.id);
       saveState();
       renderResearch();
     });
   });
+
+  const rdPrev = document.querySelector("#rdPrev");
+  if (rdPrev) {
+    rdPrev.addEventListener("click", () => {
+      setRosDailyDate(toDateKey(addDays(fromDateKey(currentRosDailyDate), -1)));
+      renderResearch();
+    });
+    document.querySelector("#rdNext").addEventListener("click", () => {
+      setRosDailyDate(toDateKey(addDays(fromDateKey(currentRosDailyDate), 1)));
+      renderResearch();
+    });
+    document.querySelector("#rdToday").addEventListener("click", () => {
+      setRosDailyDate(todayKey());
+      renderResearch();
+    });
+    const rdDateInput = document.querySelector("#rdDateInput");
+    document.querySelector("#rdPickDate").addEventListener("click", () => {
+      if (typeof rdDateInput.showPicker === "function") rdDateInput.showPicker();
+      else rdDateInput.click();
+    });
+    rdDateInput.addEventListener("change", () => {
+      if (rdDateInput.value) {
+        setRosDailyDate(rdDateInput.value);
+        renderResearch();
+      }
+    });
+  }
 
   const dailyForm = document.querySelector("#rosDailyForm");
   if (dailyForm) {
@@ -2658,16 +2810,16 @@ function bindRosEvents() {
       const selected = document.querySelector("#rosDailyTaskSelect").value;
       const section = document.querySelector("#rosDailySection").value;
       const manualTitle = document.querySelector("#rosDailyTitle").value.trim();
+      const bucket = ensureRosDailyBucket();
       if (selected !== "manual") {
         addQueueTaskToDaily(selected, section);
-        const added = state.ros.daily[section][state.ros.daily[section].length - 1];
+        const added = bucket[section][bucket[section].length - 1];
         added.oneThing = document.querySelector("#rosDailyOneThing").value.trim() || added.oneThing;
         added.timeboxHrs = Number(document.querySelector("#rosDailyTimebox").value || added.timeboxHrs || 0);
       } else if (manualTitle) {
-        if (!state.ros.daily[section]) state.ros.daily[section] = [];
-        state.ros.daily[section].push({
+        bucket[section].push({
           id: makeId("daily"),
-          slot: state.ros.daily[section].length + 1,
+          slot: bucket[section].length + 1,
           taskId: "",
           title: manualTitle,
           oneThing: document.querySelector("#rosDailyOneThing").value.trim(),
