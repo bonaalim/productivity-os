@@ -736,7 +736,7 @@ body[data-theme="dark"] .icon-btn.trash-icon {
 }
 .inline-add-form { grid-template-columns: 1fr 32px; align-items: center; }
 
-/* ROS 탭 폼: "+" 추가 버튼을 하단 전체폭 바로 통일(외딴 작은 버튼 방지) */
+/* ROS 탭 폼: 추가 버튼을 은은한 점선 "추가" 행으로 통일(외딴 작은 버튼/강한 바 둘 다 회피) */
 .ros-intake-form .form-add-btn,
 .ros-queue-form .form-add-btn,
 .daily-form .form-add-btn,
@@ -746,8 +746,28 @@ body[data-theme="dark"] .icon-btn.trash-icon {
   grid-column: 1 / -1;
   width: 100%;
   min-width: 0;
-  border-radius: 13px;
+  height: 40px;
   justify-self: stretch;
+  align-self: center;
+  background: transparent;
+  border: 1.5px dashed var(--line);
+  color: var(--muted);
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  padding-bottom: 0;
+}
+.ros-intake-form .form-add-btn:hover,
+.ros-queue-form .form-add-btn:hover,
+.daily-form .form-add-btn:hover,
+.ros-weekly-form .form-add-btn:hover,
+.ros-meeting-form .form-add-btn:hover,
+.ros-question-form .form-add-btn:hover {
+  background: var(--soft);
+  border-color: var(--accent);
+  color: var(--accent-strong);
+  transform: none;
+  opacity: 1;
 }
 @media (max-width: 1120px) {
   .form-add-btn,
