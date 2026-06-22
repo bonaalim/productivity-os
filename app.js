@@ -385,6 +385,7 @@ let currentHabitMode = localStorage.getItem("productivity-os-habit-mode") || "mo
 let currentHabitDate = localStorage.getItem("productivity-os-habit-date") || todayKey();
 let currentDayStarterDate = localStorage.getItem("productivity-os-daystarter-date") || todayKey();
 let currentRosDailyDate = localStorage.getItem("productivity-os-rosdaily-date") || todayKey();
+let currentWeeklyWeekStart = toDateKey(startOfWeek(new Date()));
 let currentTheme = localStorage.getItem("productivity-os-theme") || "light";
 const savedSidebarCollapsed = localStorage.getItem("productivity-os-sidebar-collapsed");
 let sidebarCollapsed = savedSidebarCollapsed !== null
@@ -1504,10 +1505,9 @@ function dayStarterRowDone(row) {
 
 function ensureDayStarterRows(date) {
   const existing = Array.isArray(state.dailyKickoff[date]) ? state.dailyKickoff[date] : [];
-  if (existing.length !== 4) {
-    state.dailyKickoff[date] = [0, 1, 2, 3].map(i => existing[i] || defaultDayStarterRow());
-  }
-  return state.dailyKickoff[date];
+  while (existing.length < 4) existing.push(defaultDayStarterRow());
+  state.dailyKickoff[date] = existing;
+  return existing;
 }
 
 function setDayStarterDate(key) {
@@ -1520,6 +1520,19 @@ function setRosDailyDate(key) {
   localStorage.setItem("productivity-os-rosdaily-date", key);
 }
 
+function setWeeklyWeekStart(key) {
+  currentWeeklyWeekStart = key;
+}
+
+// 주 시작(월요일) 날짜키로 "M/D ~ M/D"(월~일) 범위 문자열 생성.
+function formatWeekRange(weekStartKey) {
+  if (!weekStartKey) return "주 미지정";
+  const start = fromDateKey(weekStartKey);
+  const end = addDays(start, 6);
+  const fmt = d => `${d.getMonth() + 1}/${d.getDate()}`;
+  return `${fmt(start)} ~ ${fmt(end)}`;
+}
+
 function renderDayStarter() {
   const rows = ensureDayStarterRows(currentDayStarterDate);
   document.querySelector("#dsTitle").textContent = formatKoDate(currentDayStarterDate, { year: "numeric", month: "long", day: "numeric", weekday: "long" });
@@ -1530,16 +1543,15 @@ function renderDayStarter() {
     const inDaily = task.sourceRosId && dailyRosIds.has(task.sourceRosId);
     return { value: `task:${task.id}`, label: `${inDaily ? "💡 " : ""}${task.title}` };
   });
-  const rowLabels = ["1", "2", "3", "+"];
-
   document.querySelector("#dsTable").innerHTML = `${dailyRosIds.size ? `<p class="section-subtitle ds-ros-hint">💡 = 오늘 ROS Daily Execution에 잡아둔 연구 항목</p>` : ""}<div class="table-wrap"><table class="data-table day-starter-table">
     <thead><tr><th>#</th><th>Done</th><th>Task</th><th>Skimming</th><th>예상 실행 시간</th><th>실제 실행 시간</th></tr></thead>
     <tbody>
       ${rows.map((row, index) => {
         const currentValue = row.source === "manual" ? "manual" : `${row.source}:${row.refId}`;
         const rowDone = dayStarterRowDone(row);
+        const label = index < 3 ? String(index + 1) : "+";
         return `<tr class="${rowDone ? "done" : ""}">
-        <td>${rowLabels[index]}</td>
+        <td class="day-starter-num-cell">${label}${index >= 4 ? ` <button class="icon-btn ds-row-remove" type="button" data-ds-remove="${index}" title="행 삭제" aria-label="행 삭제">×</button>` : ""}</td>
         <td class="day-starter-done-cell"><input type="checkbox" data-ds-done="${index}" ${rowDone ? "checked" : ""} /></td>
         <td class="wide-cell day-starter-task-cell">
           <select data-ds-pick="${index}">
@@ -1558,7 +1570,8 @@ function renderDayStarter() {
       </tr>`;
       }).join("")}
     </tbody>
-  </table></div>`;
+  </table></div>
+  <div class="ds-add-row-wrap"><button class="small ghost" type="button" id="dsAddRow">+ 잡무 행 추가</button></div>`;
 
   bindDayStarterEvents(rows);
 }
@@ -1639,6 +1652,17 @@ function bindDayStarterEvents(rows) {
     }
     saveState();
     render();
+  }));
+  const dsAddRow = document.querySelector("#dsAddRow");
+  if (dsAddRow) dsAddRow.addEventListener("click", () => {
+    rows.push(defaultDayStarterRow());
+    saveState();
+    renderDayStarter();
+  });
+  document.querySelectorAll("[data-ds-remove]").forEach(btn => btn.addEventListener("click", () => {
+    rows.splice(Number(btn.dataset.dsRemove), 1);
+    saveState();
+    renderDayStarter();
   }));
 }
 
@@ -2016,6 +2040,27 @@ function openDailyEditor(id) {
         toBucket[targetSection].push(item);
       }
       if (item.taskId) applyLinkedDone(item.taskId, isClosedStatus(item.status));
+      saveState();
+      renderResearch();
+    },
+  });
+}
+
+// Daily 항목을 선택한 다른 날짜 버킷으로 복제(새 id, 상태는 초기화, 원본 유지).
+function openDailyDuplicateModal(id) {
+  const { section, item } = findDailyEntry(id);
+  if (!item) return;
+  const defaultTarget = toDateKey(addDays(fromDateKey(currentRosDailyDate), 1));
+  openEditorModal({
+    title: "다른 날짜로 복제",
+    submitText: "복제",
+    fields: [
+      { name: "execDate", label: "복제할 실행 날짜", type: "date", value: defaultTarget, full: true },
+    ],
+    onSubmit: values => {
+      const targetDate = values.execDate || defaultTarget;
+      const clone = { ...item, id: makeId("daily"), status: state.ros.settings.statuses[0] || "Todo" };
+      ensureRosDailyBucket(targetDate)[section].push(clone);
       saveState();
       renderResearch();
     },
@@ -2446,6 +2491,7 @@ function renderDailyCard(item, section) {
       <select data-ros-daily-status="${key}">
         ${statusOptions.map(status => `<option value="${escapeHtml(status)}" ${item.status === status ? "selected" : ""}>${escapeHtml(status)}</option>`).join("")}
       </select>
+      <button class="small ghost" data-ros-daily-duplicate="${key}">다른 날짜로 복제</button>
     </div>
     ${iconActions("data-ros-daily-edit", key, "data-ros-daily-delete", key)}
   </article>`;
@@ -2462,7 +2508,13 @@ function renderRosWeekly() {
       <span class="muted">${rows.length} review</span>
     </div>
     <form id="rosWeeklyForm" class="form-grid ros-weekly-form">
-      <input id="rosWeeklyStart" type="date" />
+      <div class="week-stepper" id="rosWeeklyWeek">
+        <span class="week-stepper-label">대상 주</span>
+        <button class="small ghost" id="wkPrev" type="button" aria-label="이전 주">‹</button>
+        <button class="small ghost" id="wkThis" type="button">이번 주</button>
+        <button class="small ghost" id="wkNext" type="button" aria-label="다음 주">›</button>
+        <span class="week-range">${escapeHtml(formatWeekRange(currentWeeklyWeekStart))}</span>
+      </div>
       <input id="rosWeeklyObjective" placeholder="This week objective" required />
       <textarea id="rosWeeklyOutcomes" placeholder="Top outcomes"></textarea>
       <textarea id="rosWeeklyRisks" placeholder="Risks / blockers"></textarea>
@@ -2471,7 +2523,7 @@ function renderRosWeekly() {
     </form>
     <div class="list">
       ${rows.length ? rows.map(row => `<article class="card">
-        <div class="card-title"><h4>${escapeHtml(row.weekStart || "No week")}</h4><span class="chip strong">Weekly</span></div>
+        <div class="card-title"><h4>${escapeHtml(formatWeekRange(row.weekStart))}</h4><span class="chip strong">Weekly</span></div>
         <p><strong>Objective</strong><br>${formatMultiline(row.objective)}</p>
         <p><strong>Top Outcomes</strong><br>${formatMultiline(row.topOutcomes)}</p>
         <p><strong>Risks</strong><br>${formatMultiline(row.risks)}</p>
@@ -2617,10 +2669,10 @@ function makeQueueTaskFromIntake(item) {
   };
 }
 
-function addQueueTaskToDaily(taskId, section) {
+function addQueueTaskToDaily(taskId, section, date = currentRosDailyDate) {
   const task = state.ros.queueTasks.find(item => item.id === taskId);
   if (!task) return;
-  const bucket = ensureRosDailyBucket();
+  const bucket = ensureRosDailyBucket(date);
   const dailyItem = {
     id: makeId("daily"),
     slot: (bucket[section] || []).length + 1,
@@ -2745,7 +2797,8 @@ function bindRosEvents() {
     });
   });
   document.querySelectorAll("[data-queue-to-daily]").forEach(btn => btn.addEventListener("click", () => {
-    addQueueTaskToDaily(btn.dataset.queueToDaily, btn.dataset.dailySection);
+    addQueueTaskToDaily(btn.dataset.queueToDaily, btn.dataset.dailySection, todayKey());
+    setRosDailyDate(todayKey());
     saveState();
     currentRosTab = "daily";
     localStorage.setItem("productivity-os-ros-tab", currentRosTab);
@@ -2778,6 +2831,12 @@ function bindRosEvents() {
   document.querySelectorAll("[data-ros-daily-edit]").forEach(btn => {
     btn.addEventListener("click", () => {
       openDailyEditor(btn.dataset.rosDailyEdit);
+    });
+  });
+
+  document.querySelectorAll("[data-ros-daily-duplicate]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      openDailyDuplicateModal(btn.dataset.rosDailyDuplicate);
     });
   });
 
@@ -2850,13 +2909,29 @@ function bindRosEvents() {
     });
   }
 
+  const wkPrev = document.querySelector("#wkPrev");
+  if (wkPrev) {
+    wkPrev.addEventListener("click", () => {
+      setWeeklyWeekStart(toDateKey(addDays(fromDateKey(currentWeeklyWeekStart), -7)));
+      renderResearch();
+    });
+    document.querySelector("#wkNext").addEventListener("click", () => {
+      setWeeklyWeekStart(toDateKey(addDays(fromDateKey(currentWeeklyWeekStart), 7)));
+      renderResearch();
+    });
+    document.querySelector("#wkThis").addEventListener("click", () => {
+      setWeeklyWeekStart(toDateKey(startOfWeek(new Date())));
+      renderResearch();
+    });
+  }
+
   const weeklyForm = document.querySelector("#rosWeeklyForm");
   if (weeklyForm) {
     weeklyForm.addEventListener("submit", event => {
       event.preventDefault();
       state.ros.weeklyReviews.unshift({
         id: makeId("weekly"),
-        weekStart: document.querySelector("#rosWeeklyStart").value || todayKey(),
+        weekStart: currentWeeklyWeekStart,
         objective: document.querySelector("#rosWeeklyObjective").value.trim(),
         topOutcomes: document.querySelector("#rosWeeklyOutcomes").value.trim(),
         keyTasks: "",

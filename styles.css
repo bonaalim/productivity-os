@@ -198,6 +198,24 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent-soft
 .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .actions select { width: auto; min-width: 150px; padding: 7px 10px; font-size: 12px; }
 
+/* --- Form control alignment (#5 polish): uniform control height so inputs/selects/buttons line up --- */
+.form-grid input:not([type="checkbox"]):not([type="radio"]),
+.form-grid select,
+.form-grid > button:not(.icon-btn) { height: 42px; }
+.form-grid textarea { height: auto; }
+
+/* --- Week stepper (Weekly Review) --- */
+.week-stepper { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.week-stepper-label { font-size: 12px; color: var(--muted); }
+.week-stepper .week-range { font-weight: 700; font-size: 13px; }
+.ros-weekly-form .week-stepper { grid-column: 1 / -1; }
+
+/* --- Day Starter extra rows --- */
+.day-starter-num-cell { white-space: nowrap; }
+.ds-row-remove { width: 22px; height: 22px; min-width: 22px; padding: 0; margin-left: 4px; font-size: 15px; line-height: 1; background: var(--soft); color: var(--muted); border-radius: 7px; vertical-align: middle; }
+.ds-row-remove:hover { background: var(--danger); color: #fff; }
+.ds-add-row-wrap { margin-top: 10px; }
+
 .progress { height: 10px; border-radius: 999px; background: var(--soft); overflow: hidden; }
 .progress > span { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
 
@@ -218,7 +236,7 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent-soft
 
 .calendar-panel { display: grid; gap: 16px; }
 .calendar-toolbar { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
-.segmented, .calendar-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+.segmented, .calendar-nav { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .calendar-title { font-size: 22px; font-weight: 800; letter-spacing: -0.03em; }
 .month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
 .calendar-head { color: var(--muted); font-size: 12px; margin-bottom: 8px; text-align: center; }
@@ -695,10 +713,10 @@ body[data-theme="dark"] .icon-btn.trash-icon {
 .nav-code-icon { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
 .form-add-btn,
 .settings-add-btn {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
-  align-self: center;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  align-self: start;
   justify-self: end;
   font-size: 20px;
   padding-bottom: 2px;
