@@ -307,8 +307,18 @@
     <section class="grid two-col">
       <div class="panel">
         <div class="panel-header">
-          <h3>Weekly Review</h3>
-          <span class="muted">일요일 또는 월요일 20분</span>
+          <div>
+            <h3>Weekly Review</h3>
+            <p class="section-subtitle">연구·생활 전반의 성찰/복기 (ROS·Task Matrix 상위 레이어). 일요일 또는 월요일 20분.</p>
+          </div>
+        </div>
+        <div class="week-stepper review-week-stepper">
+          <span class="week-stepper-label">대상 주</span>
+          <button class="small ghost" id="rvPrev" type="button" aria-label="이전 주">‹</button>
+          <button class="small ghost" id="rvThis" type="button">이번 주</button>
+          <button class="small ghost" id="rvNext" type="button" aria-label="다음 주">›</button>
+          <span class="week-range" id="rvRange"></span>
+          <button class="small" id="rvSnapshot" type="button">주간 스냅샷</button>
         </div>
         <form id="reviewForm" class="review-form">
           <label>이번 주 완료 / 진전<textarea id="reviewDone"></textarea></label>

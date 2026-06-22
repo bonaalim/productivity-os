@@ -78,6 +78,7 @@ const defaultRosSettings = {
   statuses: ["Todo", "Doing", "Waiting", "Done", "Dropped"],
   tracks: ["Research", "Paper/Writing", "Experiment/Sim", "Admin"],
   nowLater: ["Now", "Later"],
+  urgencyLevels: ["높음", "보통", "낮음"],
   sources: ["Meeting", "Email/Chat", "Self", "Advisor"],
   taskAreas: ["Research", "Study", "Productivity", "Admin", "Personal"],
   typeDefinitions: [
@@ -123,7 +124,8 @@ const rosSettingLists = [
   { key: "types", title: "Work Types", hint: "Deep Work / Support / Execution 등" },
   { key: "statuses", title: "Statuses", hint: "Queue와 Daily의 상태 옵션" },
   { key: "tracks", title: "Tracks", hint: "Research / Paper / Admin 등" },
-  { key: "nowLater", title: "Now/Later", hint: "수렴 질문/나중 질문 분리" },
+  { key: "nowLater", title: "Now/Later", hint: "Questions의 수렴/나중 분리" },
+  { key: "urgencyLevels", title: "긴급도", hint: "Queue 긴급도(첫 항목만 Task Matrix '긴급' 축)" },
   { key: "sources", title: "Sources", hint: "입력 출처" },
   { key: "taskAreas", title: "Task Areas", hint: "Task Matrix의 area 옵션" },
 ];
@@ -386,6 +388,7 @@ let currentHabitDate = localStorage.getItem("productivity-os-habit-date") || tod
 let currentDayStarterDate = localStorage.getItem("productivity-os-daystarter-date") || todayKey();
 let currentRosDailyDate = localStorage.getItem("productivity-os-rosdaily-date") || todayKey();
 let currentWeeklyWeekStart = toDateKey(startOfWeek(new Date()));
+let currentReviewWeekStart = toDateKey(startOfWeek(new Date()));
 let currentTheme = localStorage.getItem("productivity-os-theme") || "light";
 const savedSidebarCollapsed = localStorage.getItem("productivity-os-sidebar-collapsed");
 let sidebarCollapsed = savedSidebarCollapsed !== null
@@ -466,6 +469,10 @@ function normalizeState(input = {}) {
     ensureItemIds(bucket.deepWork, "daily");
     ensureItemIds(bucket.processing, "daily");
   });
+  // Now/Later → urgency(3단계) 마이그레이션: 기존 Now=높음, 그 외=낮음(현재 배치 보존).
+  (output.ros.queueTasks || []).forEach(task => {
+    if (task && !task.urgency) task.urgency = task.nowLater === "Now" ? "높음" : "낮음";
+  });
   ensureRosSettings(output.ros.settings);
   return output;
 }
@@ -519,7 +526,7 @@ function mergeLegacyIntake(inputRos) {
 
 function ensureRosSettings(settings) {
   const fallback = defaultRosSettings;
-  ["topics", "types", "statuses", "tracks", "nowLater", "sources", "taskAreas"].forEach(key => {
+  ["topics", "types", "statuses", "tracks", "nowLater", "urgencyLevels", "sources", "taskAreas"].forEach(key => {
     if (!Array.isArray(settings[key]) || !settings[key].length) settings[key] = clone(fallback[key] || []);
   });
   if (!Array.isArray(settings.typeDefinitions)) settings.typeDefinitions = clone(fallback.typeDefinitions || []);
@@ -1161,17 +1168,17 @@ const quadrants = {
   delete: { title: "💤 중요하지 않고 긴급하지 않음", desc: "휴식/취미/하지 않아도 되는 일: 부차적 자기관리, 미용 관련 등" },
 };
 
-// ROS Queue의 type x nowLater 조합으로 Task Matrix 사분면을 결정.
-// 여기 표만 바꾸면 라우팅 규칙을 조정할 수 있음.
-const ROS_QUEUE_TO_QUADRANT = {
-  "Deep Work": { Now: "do", Later: "schedule" },
-  "Research Support": { Now: "do", Later: "schedule" },
-  Execution: { Now: "delegate", Later: "delete" },
-  Operations: { Now: "delegate", Later: "delete" },
-};
+// 중요도(세로축)를 결정하는 Type 집합. 여기 속하면 "중요"(위 행).
+const IMPORTANT_TYPES = ["Deep Work", "Research Support"];
 
+// ROS Queue 항목을 Task Matrix 사분면으로 라우팅.
+// 중요도 = Type(중요 타입 여부), 긴급도 = urgency가 최상위 레벨(기본 "높음")일 때만 긴급.
 function routeRosToQuadrant(queueTask) {
-  return ROS_QUEUE_TO_QUADRANT[queueTask.type]?.[queueTask.nowLater] || "schedule";
+  const important = IMPORTANT_TYPES.includes(queueTask.type);
+  const topUrgency = state.ros.settings?.urgencyLevels?.[0] || "높음";
+  const urgent = queueTask.urgency === topUrgency;
+  if (important) return urgent ? "do" : "schedule";
+  return urgent ? "delegate" : "delete";
 }
 
 const ROS_TOPIC_TO_TASK_AREA = {
@@ -1848,6 +1855,59 @@ function openEditorModal({ title, fields, onSubmit, submitText = "저장" }) {
   if (first) first.focus();
 }
 
+// 읽기 전용 정보 팝업(폼 아님). 기존 모달 마크업/CSS 재사용.
+function openInfoModal({ title, bodyHtml }) {
+  const backdrop = document.createElement("div");
+  backdrop.className = "modal-backdrop";
+  backdrop.innerHTML = `<div class="modal-card" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}">
+    <div class="modal-header">
+      <h3>${escapeHtml(title)}</h3>
+      <button type="button" class="icon-btn modal-close" aria-label="닫기">×</button>
+    </div>
+    <div class="modal-body">${bodyHtml}</div>
+    <div class="modal-footer"><button type="button" class="secondary ghost-top modal-cancel">닫기</button></div>
+  </div>`;
+  document.body.append(backdrop);
+  const close = () => { backdrop.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = event => { if (event.key === "Escape") close(); };
+  backdrop.querySelector(".modal-close").addEventListener("click", close);
+  backdrop.querySelector(".modal-cancel").addEventListener("click", close);
+  backdrop.addEventListener("click", event => { if (event.target === backdrop) close(); });
+  document.addEventListener("keydown", onKey);
+}
+
+// 선택한 주(월~일)의 ROS Daily / Task Matrix / Queue 요약 스냅샷.
+function openWeeklySnapshotModal(weekStartKey) {
+  const start = fromDateKey(weekStartKey);
+  const weekdayNames = ["월", "화", "수", "목", "금", "토", "일"];
+  const days = [];
+  for (let i = 0; i < 7; i++) {
+    const k = toDateKey(addDays(start, i));
+    const items = getDailyWorkItems(k);
+    days.push({ k, name: weekdayNames[i], total: items.length, done: items.filter(it => isClosedStatus(it.status)).length });
+  }
+  const weekTotal = days.reduce((a, d) => a + d.total, 0);
+  const weekDone = days.reduce((a, d) => a + d.done, 0);
+  const tasksOpen = state.tasks.filter(t => !t.done).length;
+  const tasksDone = state.tasks.filter(t => t.done).length;
+  const queueOpen = getOpenQueueTasks().length;
+  const objectives = (state.ros.weeklyReviews || []).filter(r => r.weekStart === weekStartKey);
+  const body = `
+    <p class="section-subtitle">${escapeHtml(formatWeekRange(weekStartKey))} 주간 요약 (읽기 전용)</p>
+    <div class="snapshot-stats">
+      <div class="snapshot-stat"><span class="snapshot-num">${weekDone}/${weekTotal}</span><span class="muted">ROS Daily 완료/전체</span></div>
+      <div class="snapshot-stat"><span class="snapshot-num">${tasksDone}/${tasksOpen + tasksDone}</span><span class="muted">Task Matrix done/전체</span></div>
+      <div class="snapshot-stat"><span class="snapshot-num">${queueOpen}</span><span class="muted">ROS Queue open</span></div>
+    </div>
+    <div class="table-wrap compact-table"><table class="data-table">
+      <thead><tr><th>요일</th><th>날짜</th><th>ROS Daily 완료/전체</th></tr></thead>
+      <tbody>${days.map(d => `<tr><td>${d.name}</td><td>${escapeHtml(d.k)}</td><td>${d.done}/${d.total}</td></tr>`).join("")}</tbody>
+    </table></div>
+    ${objectives.length ? `<p><strong>이 주 ROS Weekly Objective</strong></p><ul class="plain-list">${objectives.map(o => `<li>${escapeHtml(o.objective || "(제목 없음)")}</li>`).join("")}</ul>` : `<p class="muted">이 주에 작성된 ROS Weekly Objective 없음.</p>`}
+  `;
+  openInfoModal({ title: "주간 스냅샷", bodyHtml: body });
+}
+
 function trashIconSvg() {
   return `<svg class="trash-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
     <path d="M9 6V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1" />
@@ -1991,7 +2051,7 @@ function openQueueEditor(task) {
       { name: "track", label: "Track", type: "select", value: task.track || "", options: settings.tracks || [] },
       { name: "type", label: "Work Type", type: "select", value: task.type || "", options: settings.types || [] },
       { name: "status", label: "Status", type: "select", value: task.status || "", options: settings.statuses || [] },
-      { name: "nowLater", label: "Now/Later", type: "select", value: task.nowLater || "", options: settings.nowLater || [] },
+      { name: "urgency", label: "긴급도", type: "select", value: task.urgency || "", options: settings.urgencyLevels || [] },
       { name: "effortHrs", label: "Effort h", type: "number", value: task.effortHrs || "", step: "0.5", min: "0" },
       { name: "due", label: "Due", type: "date", value: task.due || "" },
       { name: "nextAction", label: "Next Action", type: "textarea", value: task.nextAction || "", full: true },
@@ -2335,11 +2395,11 @@ function renderRosQueue() {
       <select id="rosQueueTrack">${optionList(settings.tracks)}</select>
       <select id="rosQueueType">${optionList(settings.types)}</select>
       <select id="rosQueueStatus">${optionList(settings.statuses, settings.statuses[0])}</select>
-      <select id="rosQueueNowLater">${optionList(settings.nowLater, settings.nowLater[0])}</select>
+      <select id="rosQueueUrgency" title="긴급도">${optionList(settings.urgencyLevels, settings.urgencyLevels[1])}</select>
       <input id="rosQueueEffort" type="number" min="0" step="0.5" placeholder="h" />
       <input id="rosQueueDue" type="date" />
       <input id="rosQueueNext" placeholder="Next action" />
-      <button type="submit">Queue 추가</button>
+      <button class="icon-btn add-icon form-add-btn" type="submit" aria-label="Queue 추가" title="Queue 추가">+</button>
     </form>
     <div class="view-toolbar">
       <div class="segmented compact-segmented">
@@ -2359,7 +2419,7 @@ function renderQueueTable(rows) {
   const settings = state.ros.settings;
   return `<div class="table-wrap ros-table-wrap"><table class="data-table interactive-table">
     <thead><tr>
-      <th>ID</th><th>Title</th><th>Topic</th><th>Track</th><th>Type</th><th>Status</th><th>Now/Later</th><th>Effort</th><th>Due</th><th>Next Action</th><th>Actions</th>
+      <th>ID</th><th>Title</th><th>Topic</th><th>Track</th><th>Type</th><th>Status</th><th>긴급도</th><th>Effort</th><th>Due</th><th>Next Action</th><th>Actions</th>
     </tr></thead>
     <tbody>
       ${rows.map(task => `<tr class="${isClosedStatus(task.status) ? "muted-row" : ""}">
@@ -2369,7 +2429,7 @@ function renderQueueTable(rows) {
         <td>${escapeHtml(task.track || "")}</td>
         <td>${escapeHtml(task.type || "")}</td>
         <td><select class="table-select" data-ros-queue-status="${escapeHtml(task.id)}">${optionList(settings.statuses, task.status)}</select></td>
-        <td>${escapeHtml(task.nowLater || "")}</td>
+        <td>${escapeHtml(task.urgency || "")}</td>
         <td>${task.effortHrs ? `${escapeHtml(task.effortHrs)}h` : ""}</td>
         <td>${escapeHtml(task.due || "")}</td>
         <td class="wide-cell">${formatMultiline(task.nextAction || "")}</td>
@@ -2391,7 +2451,7 @@ function renderQueueCard(task) {
       <span class="chip">${escapeHtml(task.topic || "No topic")}</span>
       <span class="chip">${escapeHtml(task.track || "No track")}</span>
       <span class="chip">${escapeHtml(task.type || "No type")}</span>
-      <span class="chip">${escapeHtml(task.nowLater || "Now/Later")}</span>
+      <span class="chip">긴급도 ${escapeHtml(task.urgency || "보통")}</span>
       ${task.effortHrs ? `<span class="chip">${escapeHtml(task.effortHrs)}h</span>` : ""}
       ${task.due ? `<span class="chip">Due ${escapeHtml(task.due)}</span>` : ""}
     </div>
@@ -2503,7 +2563,7 @@ function renderRosWeekly() {
     <div class="panel-header">
       <div>
         <h3>Weekly Review</h3>
-        <p class="section-subtitle">ROS의 우선순위를 주 1–2회만 재편성하기 위한 리뷰.</p>
+        <p class="section-subtitle">ROS Queue 우선순위 재편성용 (연구 한정). 생활 전반 회고는 상단 Weekly Review 탭에서.</p>
       </div>
       <span class="muted">${rows.length} review</span>
     </div>
@@ -2655,12 +2715,8 @@ function makeQueueTaskFromIntake(item) {
     track: state.ros.settings.tracks[0],
     type: item.type || state.ros.settings.types[0],
     status: state.ros.settings.statuses[0],
-    nowLater: state.ros.settings.nowLater[0],
+    urgency: state.ros.settings.urgencyLevels[1] || "보통",
     effortHrs: "",
-    impact: "",
-    urgency: "",
-    strategic: "",
-    priorityScore: "",
     due: item.due || "",
     nextAction: item.actions || item.details || "",
     stopRule: "",
@@ -2769,12 +2825,8 @@ function bindRosEvents() {
         track: document.querySelector("#rosQueueTrack").value,
         type: document.querySelector("#rosQueueType").value,
         status: document.querySelector("#rosQueueStatus").value,
-        nowLater: document.querySelector("#rosQueueNowLater").value,
+        urgency: document.querySelector("#rosQueueUrgency").value,
         effortHrs: document.querySelector("#rosQueueEffort").value,
-        impact: "",
-        urgency: "",
-        strategic: "",
-        priorityScore: "",
         due: document.querySelector("#rosQueueDue").value,
         nextAction: document.querySelector("#rosQueueNext").value.trim(),
         stopRule: "",
@@ -3082,11 +3134,30 @@ function renderAlgorithmNode(node, depth = 0, root = false) {
 }
 
 function renderReview() {
+  const rvRange = document.querySelector("#rvRange");
+  if (rvRange) rvRange.textContent = formatWeekRange(currentReviewWeekStart);
+  document.querySelector("#rvPrev")?.addEventListener("click", () => {
+    currentReviewWeekStart = toDateKey(addDays(fromDateKey(currentReviewWeekStart), -7));
+    render();
+  });
+  document.querySelector("#rvNext")?.addEventListener("click", () => {
+    currentReviewWeekStart = toDateKey(addDays(fromDateKey(currentReviewWeekStart), 7));
+    render();
+  });
+  document.querySelector("#rvThis")?.addEventListener("click", () => {
+    currentReviewWeekStart = toDateKey(startOfWeek(new Date()));
+    render();
+  });
+  document.querySelector("#rvSnapshot")?.addEventListener("click", () => {
+    openWeeklySnapshotModal(currentReviewWeekStart);
+  });
+
   document.querySelector("#reviewForm").addEventListener("submit", event => {
     event.preventDefault();
     state.reviews.unshift({
       id: makeId("review"),
       createdAt: new Date().toISOString(),
+      weekStart: currentReviewWeekStart,
       done: document.querySelector("#reviewDone").value.trim(),
       blocked: document.querySelector("#reviewBlocked").value.trim(),
       next: document.querySelector("#reviewNext").value.trim(),
@@ -3098,7 +3169,7 @@ function renderReview() {
 
   document.querySelector("#reviewList").innerHTML = state.reviews.length ? state.reviews.map(review => `
     <article class="card">
-      <div class="card-title"><h4>${new Date(review.createdAt).toLocaleDateString("ko-KR")}</h4><span class="chip">review</span></div>
+      <div class="card-title"><h4>${escapeHtml(review.weekStart ? formatWeekRange(review.weekStart) : new Date(review.createdAt).toLocaleDateString("ko-KR"))}</h4><span class="chip">review</span></div>
       <p><strong>완료/진전</strong><br>${escapeHtml(review.done || "-")}</p>
       <p><strong>막힘/회피</strong><br>${escapeHtml(review.blocked || "-")}</p>
       <p><strong>다음 주 핵심 3개</strong><br>${escapeHtml(review.next || "-")}</p>
