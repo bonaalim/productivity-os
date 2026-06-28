@@ -2026,7 +2026,7 @@ function openIntakeEditor(item) {
       { name: "type", label: "Work Type", type: "select", value: item.type || "", options: settings.types || [] },
       { name: "status", label: "Status", type: "select", value: item.status || "", options: settings.statuses || [] },
       { name: "due", label: "Due", type: "date", value: item.due || "" },
-      { name: "details", label: "Details", type: "textarea", value: item.details || "", full: true },
+      { name: "details", label: "메모", type: "textarea", value: item.details || "", full: true },
       { name: "decisions", label: "Decisions", type: "textarea", value: item.decisions || "", full: true },
       { name: "actions", label: "Actions", type: "textarea", value: item.actions || "", full: true },
       { name: "openQuestions", label: "Open Questions", type: "textarea", value: item.openQuestions || "", full: true },
@@ -2054,8 +2054,8 @@ function openQueueEditor(task) {
       { name: "urgency", label: "긴급도", type: "select", value: task.urgency || "", options: settings.urgencyLevels || [] },
       { name: "effortHrs", label: "Effort h", type: "number", value: task.effortHrs || "", step: "0.5", min: "0" },
       { name: "due", label: "Due", type: "date", value: task.due || "" },
-      { name: "nextAction", label: "Next Action", type: "textarea", value: task.nextAction || "", full: true },
-      { name: "notes", label: "Notes", type: "textarea", value: task.notes || "", full: true },
+      { name: "nextAction", label: "메모", type: "textarea", value: task.nextAction || "", full: true },
+      { name: "notes", label: "메모 (추가)", type: "textarea", value: task.notes || "", full: true },
     ],
     onSubmit: values => {
       Object.assign(task, values, { title: values.title.trim() || task.title });
@@ -2079,20 +2079,20 @@ function openDailyEditor(id) {
       { name: "status", label: "Status", type: "select", value: item.status || "", options: statusOptions },
       { name: "taskId", label: "Task ID", type: "text", value: item.taskId || "" },
       { name: "timeboxHrs", label: "Timebox h", type: "number", value: item.timeboxHrs || "", step: "0.5", min: "0" },
-      { name: "oneThing", label: "The One Thing", type: "textarea", value: item.oneThing || "", full: true },
-      { name: "action", label: "Action", type: "textarea", value: item.action || "", full: true },
+      { name: "memo", label: "메모", type: "textarea", value: item.oneThing || item.action || "", full: true },
     ],
     onSubmit: values => {
+      const memo = values.memo.trim();
+      const targetSection = values.section;
       Object.assign(item, {
         title: values.title.trim() || item.title,
         status: values.status,
         taskId: values.taskId.trim(),
         timeboxHrs: values.timeboxHrs === "" ? "" : Number(values.timeboxHrs || 0),
-        oneThing: values.oneThing.trim(),
-        action: values.action.trim(),
+        oneThing: targetSection === "processing" ? "" : memo,
+        action: targetSection === "processing" ? memo : "",
       });
       const targetDate = values.execDate || currentDate;
-      const targetSection = values.section;
       if (targetDate !== currentDate || targetSection !== section) {
         const fromBucket = ensureRosDailyBucket(currentDate);
         fromBucket[section] = fromBucket[section].filter(entry => entry.id !== item.id);
@@ -2106,7 +2106,7 @@ function openDailyEditor(id) {
   });
 }
 
-// Daily 항목을 선택한 다른 날짜 버킷으로 복제(새 id, 상태는 초기화, 원본 유지).
+// Daily 항목을 선택한 다른 날짜 버킷으로 복제(새 id, 상태 포함 그대로 복제, 원본 유지).
 function openDailyDuplicateModal(id) {
   const { section, item } = findDailyEntry(id);
   if (!item) return;
@@ -2119,7 +2119,7 @@ function openDailyDuplicateModal(id) {
     ],
     onSubmit: values => {
       const targetDate = values.execDate || defaultTarget;
-      const clone = { ...item, id: makeId("daily"), status: state.ros.settings.statuses[0] || "Todo" };
+      const clone = { ...item, id: makeId("daily") };
       ensureRosDailyBucket(targetDate)[section].push(clone);
       saveState();
       renderResearch();
@@ -2325,7 +2325,7 @@ function renderIntakeTable(rows) {
   if (!rows.length) return `<div class="empty">표시할 Intake 항목이 없습니다.</div>`;
   return `<div class="table-wrap ros-table-wrap"><table class="data-table interactive-table">
     <thead><tr>
-      <th>Date</th><th>Kind</th><th>Title</th><th>Source</th><th>Topic</th><th>Type</th><th>Status</th><th>Due</th><th>Details</th><th>Actions</th>
+      <th>Date</th><th>Kind</th><th>Title</th><th>Source</th><th>Topic</th><th>Type</th><th>Status</th><th>Due</th><th>메모</th><th>Actions</th>
     </tr></thead>
     <tbody>
       ${rows.map(item => `<tr class="${item.queued || isClosedStatus(item.status) ? "muted-row" : ""}">
@@ -2419,7 +2419,7 @@ function renderQueueTable(rows) {
   const settings = state.ros.settings;
   return `<div class="table-wrap ros-table-wrap"><table class="data-table interactive-table">
     <thead><tr>
-      <th>ID</th><th>Title</th><th>Topic</th><th>Track</th><th>Type</th><th>Status</th><th>긴급도</th><th>Effort</th><th>Due</th><th>Next Action</th><th>Actions</th>
+      <th>ID</th><th>Title</th><th>Topic</th><th>Track</th><th>Type</th><th>Status</th><th>긴급도</th><th>Effort</th><th>Due</th><th>메모</th><th>Actions</th>
     </tr></thead>
     <tbody>
       ${rows.map(task => `<tr class="${isClosedStatus(task.status) ? "muted-row" : ""}">
@@ -2455,7 +2455,7 @@ function renderQueueCard(task) {
       ${task.effortHrs ? `<span class="chip">${escapeHtml(task.effortHrs)}h</span>` : ""}
       ${task.due ? `<span class="chip">Due ${escapeHtml(task.due)}</span>` : ""}
     </div>
-    ${task.nextAction ? `<p><strong>Next Action</strong><br>${formatMultiline(task.nextAction)}</p>` : ""}
+    ${task.nextAction ? `<p><strong>메모</strong><br>${formatMultiline(task.nextAction)}</p>` : ""}
     <div class="actions">
       <select data-ros-queue-status="${escapeHtml(task.id)}">${optionList(settings.statuses, task.status)}</select>
       <button class="small" data-queue-to-daily="${escapeHtml(task.id)}" data-daily-section="deepWork">오늘 Deep Work로</button>
@@ -2501,7 +2501,7 @@ function renderRosDaily() {
         </select>
         <select id="rosDailySection"><option value="deepWork">Deep Work</option><option value="processing">Processing</option></select>
         <input id="rosDailyTitle" placeholder="직접 입력 시 제목" />
-        <input id="rosDailyOneThing" placeholder="The One Thing / outcome" />
+        <input id="rosDailyOneThing" placeholder="메모" />
         <input id="rosDailyTimebox" type="number" min="0" step="0.5" placeholder="h" />
         <button class="icon-btn add-icon form-add-btn" type="submit" aria-label="오늘 목록에 추가" title="오늘 목록에 추가">+</button>
       </form>
@@ -2545,8 +2545,8 @@ function renderDailyCard(item, section) {
       ${item.timeboxHrs ? `<span class="chip">${escapeHtml(item.timeboxHrs)}h</span>` : ""}
       <span class="chip">${escapeHtml(item.status || "No status")}</span>
     </div>
-    ${item.oneThing ? `<p><strong>The One Thing</strong><br>${escapeHtml(item.oneThing)}</p>` : ""}
-    ${item.action ? `<p><strong>Action</strong><br>${escapeHtml(item.action)}</p>` : ""}
+    ${item.oneThing ? `<p><strong>메모</strong><br>${escapeHtml(item.oneThing)}</p>` : ""}
+    ${item.action ? `<p><strong>메모</strong><br>${escapeHtml(item.action)}</p>` : ""}
     <div class="actions">
       <select data-ros-daily-status="${key}">
         ${statusOptions.map(status => `<option value="${escapeHtml(status)}" ${item.status === status ? "selected" : ""}>${escapeHtml(status)}</option>`).join("")}
