@@ -713,6 +713,22 @@ function setPage(pageId) {
   render();
 }
 
+// URL로 페이지 딥링크: ?page=dayStarter 또는 #dayStarter (위젯/단축어에서 사용).
+function pageFromUrl() {
+  const fromQuery = new URLSearchParams(location.search).get("page");
+  const fromHash = (location.hash || "").replace(/^#\/?/, "").trim();
+  const candidate = (fromQuery || fromHash || "").trim();
+  return pages.some(p => p.id === candidate) ? candidate : null;
+}
+
+function applyUrlRoute() {
+  const id = pageFromUrl();
+  if (id) {
+    currentPage = id;
+    localStorage.setItem("productivity-os-page", id);
+  }
+}
+
 function setRosTab(tabId) {
   currentRosTab = tabId;
   localStorage.setItem("productivity-os-ros-tab", tabId);
@@ -3302,5 +3318,10 @@ function setupImportExport() {
 }
 
 setupImportExport();
+applyUrlRoute();
+window.addEventListener("hashchange", () => {
+  const id = (location.hash || "").replace(/^#\/?/, "").trim();
+  if (pages.some(p => p.id === id) && id !== currentPage) setPage(id);
+});
 render();
 initSupabaseAuth();
