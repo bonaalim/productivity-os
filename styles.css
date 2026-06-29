@@ -148,15 +148,18 @@ h2 { margin: 0; font-size: 32px; letter-spacing: -0.04em; }
 
 .form-grid { display: grid; gap: 10px; grid-template-columns: minmax(260px, 1fr) 150px minmax(180px, .6fr) auto; align-items: start; }
 .form-grid textarea { grid-column: 1 / -1; min-height: 92px; }
+#brainTitle { grid-column: 1 / -1; }
 .compact { grid-template-columns: minmax(220px, 1fr) 180px 150px 220px auto; }
 .task-form { grid-template-columns: minmax(220px, 1fr) 150px 115px 145px 200px minmax(170px, .8fr) 130px auto; }
 .study-form { grid-template-columns: minmax(220px, 1fr) 160px 160px 130px auto; margin-bottom: 14px; }
 .study-notes { margin-top: 8px; font-size: 13px; line-height: 1.5; opacity: .85; overflow-wrap: anywhere; word-break: break-word; }
+.brain-text { margin-top: 6px; font-size: 13px; font-weight: 400; line-height: 1.5; opacity: .9; overflow-wrap: anywhere; word-break: break-word; }
 .study-notes a { color: var(--accent, #4c8bf5); }
 .exploration-form { grid-template-columns: minmax(220px, 1fr) 160px 130px auto; margin-bottom: 14px; }
 .habit-form { grid-template-columns: minmax(220px, 1fr) 160px auto; }
-.ros-intake-form { grid-template-columns: 130px 150px minmax(240px, 1fr) 150px 160px 170px 140px 150px; margin-bottom: 16px; }
-.ros-intake-form textarea { grid-column: 1 / -2; }
+.ros-intake-form { grid-template-columns: 130px 150px 150px 160px 170px 140px 150px; margin-bottom: 16px; }
+.ros-intake-form #rosIntakeTitle { grid-column: 1 / -1; }
+.ros-intake-form textarea { grid-column: 1 / -1; }
 .ros-queue-form { grid-template-columns: minmax(220px, 1.2fr) 150px 150px 160px 140px 130px 90px 145px minmax(180px, 1fr) auto; margin-bottom: 16px; }
 .ros-weekly-form { grid-template-columns: 150px minmax(220px, 1fr) 150px auto; margin-bottom: 16px; }
 .ros-weekly-form textarea { grid-column: span 2; }
@@ -174,6 +177,9 @@ input, select, textarea {
 }
 textarea { resize: vertical; }
 textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+/* Checkboxes/radios shouldn't stretch to full width; label text sits to their right on one line */
+input[type="checkbox"], input[type="radio"] { width: auto; padding: 0; flex: none; }
+.checkbox-inline { display: inline-flex; align-items: center; gap: 8px; }
 
 .list { display: grid; gap: 12px; }
 .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
@@ -340,10 +346,16 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent-soft
 }
 .data-table tr:last-child td { border-bottom: 0; }
 .wide-cell { min-width: 220px; max-width: 520px; line-height: 1.45; }
-.day-starter-table { min-width: 760px; }
-.day-starter-task-cell { display: grid; gap: 6px; }
-.day-starter-skim-cell { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
-.day-starter-skim-cell input[type="time"] { min-width: 0; }
+.day-starter-table { min-width: 880px; }
+.day-starter-task-cell .ds-cell-wrap { display: grid; gap: 6px; }
+.day-starter-time-cell .ds-cell-wrap { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.day-starter-time-cell input[type="time"] { min-width: 0; }
+.th-sub { display: block; font-size: 10px; font-weight: 500; color: var(--muted); letter-spacing: .02em; margin-top: 1px; }
+.day-starter-num-cell .ds-cell-wrap { display: flex; align-items: center; gap: 4px; }
+.ds-num { min-width: 12px; font-weight: 700; }
+.ds-drag { width: 26px; height: 26px; min-width: 26px; }
+.day-starter-table tr.ds-draggable.dragging { opacity: .45; }
+.day-starter-table tr.ds-draggable.drag-over td { box-shadow: inset 0 2px 0 0 var(--accent); }
 .compact-table .data-table { min-width: 0; }
 .plain-list { margin: 0; padding-left: 20px; color: var(--ink); line-height: 1.7; }
 .sheet-note {
@@ -397,6 +409,17 @@ textarea:focus, input:focus, select:focus { outline: 2px solid var(--accent-soft
   gap: 7px;
   margin-top: 2px;
 }
+/* Footer row: left-aligned actions + right-aligned edit/delete on one baseline */
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.card-footer .actions { margin: 0; }
+.card-footer .card-bottom-actions { margin-top: 0; }
 .icon-btn {
   width: 34px;
   height: 34px;
@@ -749,9 +772,9 @@ body[data-theme="dark"] .icon-btn.trash-icon {
   height: 40px;
   justify-self: stretch;
   align-self: center;
-  background: transparent;
-  border: 1.5px dashed var(--line);
-  color: var(--muted);
+  background: color-mix(in srgb, var(--accent) 7%, var(--panel));
+  border: 1.5px dashed color-mix(in srgb, var(--accent) 35%, var(--line));
+  color: var(--accent-strong);
   border-radius: 12px;
   font-size: 14px;
   font-weight: 600;

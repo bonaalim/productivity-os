@@ -1019,9 +1019,10 @@ function renderDashboard() {
   const dayStarterRows = (state.dailyKickoff[todayKey()] || []).filter(row => row.label && row.label.trim());
   document.querySelector("#todayActions").innerHTML = dayStarterRows.length ? dayStarterRows.map(row => {
     const skim = row.skimStart || row.skimEnd ? `${row.skimStart || "--:--"} – ${row.skimEnd || "--:--"}` : "";
+    const plan = row.planStart || row.planEnd ? `${row.planStart || "--:--"} – ${row.planEnd || "--:--"}` : "";
     return `
     <div class="card">
-      <div class="card-title"><h4>${escapeHtml(row.label)}</h4>${row.estMin ? `<span class="chip">${escapeHtml(String(row.estMin))}분</span>` : ""}</div>
+      <div class="card-title"><h4>${escapeHtml(row.label)}</h4>${plan ? `<span class="chip">${escapeHtml(plan)}</span>` : ""}</div>
       ${skim ? `<div class="meta"><span class="chip">Skim ${escapeHtml(skim)}</span></div>` : ""}
     </div>`;
   }).join("") : `<div class="empty">Day Starter에 입력된 오늘 항목이 없습니다.</div>`;
@@ -1033,6 +1034,7 @@ function renderBrain() {
     event.preventDefault();
     state.brain.unshift({
       id: makeId("brain"),
+      title: document.querySelector("#brainTitle").value.trim(),
       text: document.querySelector("#brainText").value.trim(),
       type: document.querySelector("#brainType").value,
       tag: document.querySelector("#brainTag").value.trim(),
@@ -1046,9 +1048,10 @@ function renderBrain() {
   list.innerHTML = state.brain.length ? state.brain.map(item => `
     <article class="card ${item.processed ? "done" : ""}">
       <div class="card-title">
-        <h4>${escapeHtml(item.text)}</h4>
+        ${item.title ? `<h4>${escapeHtml(item.title)}</h4>` : `<span></span>`}
         <span class="chip ${item.processed ? "" : "strong"}">${item.processed ? "processed" : "inbox"}</span>
       </div>
+      ${item.text ? `<p class="brain-text">${formatMultiline(item.text)}</p>` : ""}
       <div class="meta">
         <span class="chip">${escapeHtml(item.type)}</span>
         <span class="chip">${escapeHtml(item.tag || "no tag")}</span>
@@ -1072,7 +1075,7 @@ function renderBrain() {
   list.querySelectorAll("[data-brain-task]").forEach(btn => btn.addEventListener("click", () => {
     const item = state.brain.find(b => b.id === btn.dataset.brainTask);
     if (!item) return;
-    state.tasks.unshift({ id: makeId("task"), title: item.text.slice(0, 90), area: item.tag || "Productivity", due: "", quadrant: "schedule", done: false });
+    state.tasks.unshift({ id: makeId("task"), title: (item.title || item.text).slice(0, 90), area: item.tag || "Productivity", due: "", quadrant: "schedule", done: false });
     item.processed = true;
     saveState();
     render();
@@ -1080,7 +1083,7 @@ function renderBrain() {
   list.querySelectorAll("[data-brain-study]").forEach(btn => btn.addEventListener("click", () => {
     const item = state.brain.find(b => b.id === btn.dataset.brainStudy);
     if (!item) return;
-    state.studies.unshift({ id: makeId("study"), topic: item.text.slice(0, 90), bucket: "Exploration", track: "Personal", target: 0, logged: 0 });
+    state.studies.unshift({ id: makeId("study"), topic: (item.title || item.text).slice(0, 90), bucket: "Exploration", track: "Personal", target: 0, logged: 0 });
     item.processed = true;
     saveState();
     render();
@@ -1498,7 +1501,15 @@ function bindHabitEvents() {
 }
 
 function defaultDayStarterRow() {
-  return { label: "", source: "manual", refId: "", skimStart: "", skimEnd: "", estMin: "", actualMin: "", done: false };
+  return { label: "", source: "manual", refId: "", skimStart: "", skimEnd: "", planStart: "", planEnd: "", actualStart: "", actualEnd: "", done: false };
+}
+
+// Day Starter 행을 from→to 위치로 이동(드래그 재정렬). 범위 밖/동일이면 무시.
+function reorderDayStarterRow(rows, from, to) {
+  if (from === to || from < 0 || to < 0 || from >= rows.length || to >= rows.length) return false;
+  const [moved] = rows.splice(from, 1);
+  rows.splice(to, 0, moved);
+  return true;
 }
 
 // Day Starter 행의 done 표시 상태. task 참조 행은 항상 task.done을 따름(양방향), 그 외는 행 자체 done.
@@ -1551,29 +1562,42 @@ function renderDayStarter() {
     return { value: `task:${task.id}`, label: `${inDaily ? "💡 " : ""}${task.title}` };
   });
   document.querySelector("#dsTable").innerHTML = `${dailyRosIds.size ? `<p class="section-subtitle ds-ros-hint">💡 = 오늘 ROS Daily Execution에 잡아둔 연구 항목</p>` : ""}<div class="table-wrap"><table class="data-table day-starter-table">
-    <thead><tr><th>#</th><th>Done</th><th>Task</th><th>Skimming</th><th>예상 실행 시간</th><th>실제 실행 시간</th></tr></thead>
+    <thead><tr><th>#</th><th>Done</th><th>Task</th><th>Skimming</th><th>계획 블럭<span class="th-sub">할당 시각</span></th><th>실제 수행<span class="th-sub">실제 시각</span></th></tr></thead>
     <tbody>
       ${rows.map((row, index) => {
         const currentValue = row.source === "manual" ? "manual" : `${row.source}:${row.refId}`;
         const rowDone = dayStarterRowDone(row);
         const label = index < 3 ? String(index + 1) : "+";
-        return `<tr class="${rowDone ? "done" : ""}">
-        <td class="day-starter-num-cell">${label}${index >= 4 ? ` <button class="icon-btn ds-row-remove" type="button" data-ds-remove="${index}" title="행 삭제" aria-label="행 삭제">×</button>` : ""}</td>
+        const reorderable = index < 3;
+        return `<tr class="${rowDone ? "done" : ""}${reorderable ? " ds-draggable" : ""}"${reorderable ? ` data-ds-row="${index}"` : ""}>
+        <td class="day-starter-num-cell"><div class="ds-cell-wrap">
+          <span class="ds-num">${label}</span>
+          ${reorderable ? `<button class="icon-btn drag-handle ds-drag" type="button" draggable="true" data-ds-drag="${index}" title="드래그해서 순서 변경" aria-label="순서 변경">${dragHandleSvg()}</button>` : ""}
+          ${index >= 4 ? `<button class="icon-btn ds-row-remove" type="button" data-ds-remove="${index}" title="행 삭제" aria-label="행 삭제">×</button>` : ""}
+        </div></td>
         <td class="day-starter-done-cell"><input type="checkbox" data-ds-done="${index}" ${rowDone ? "checked" : ""} /></td>
-        <td class="wide-cell day-starter-task-cell">
+        <td class="wide-cell day-starter-task-cell"><div class="ds-cell-wrap">
           <select data-ds-pick="${index}">
             <option value="manual" ${currentValue === "manual" ? "selected" : ""}>직접 입력</option>
             ${taskOptions.length ? `<optgroup label="Task Matrix">${taskOptions.map(opt => `<option value="${escapeHtml(opt.value)}" ${currentValue === opt.value ? "selected" : ""}>${escapeHtml(opt.label)}</option>`).join("")}</optgroup>` : ""}
           </select>
           <input data-ds-label="${index}" placeholder="작업 설명" value="${escapeHtml(row.label)}" />
-        </td>
-        <td class="day-starter-skim-cell">
+        </div></td>
+        <td class="day-starter-time-cell"><div class="ds-cell-wrap">
           <input data-ds-skimstart="${index}" type="time" value="${escapeHtml(row.skimStart)}" />
           <span>–</span>
           <input data-ds-skimend="${index}" type="time" value="${escapeHtml(row.skimEnd)}" />
-        </td>
-        <td><input data-ds-est="${index}" type="number" min="0" step="5" placeholder="min" value="${escapeHtml(row.estMin)}" /></td>
-        <td><input data-ds-actual="${index}" type="number" min="0" step="5" placeholder="min" value="${escapeHtml(row.actualMin)}" /></td>
+        </div></td>
+        <td class="day-starter-time-cell"><div class="ds-cell-wrap">
+          <input data-ds-planstart="${index}" type="time" value="${escapeHtml(row.planStart || "")}" />
+          <span>–</span>
+          <input data-ds-planend="${index}" type="time" value="${escapeHtml(row.planEnd || "")}" />
+        </div></td>
+        <td class="day-starter-time-cell"><div class="ds-cell-wrap">
+          <input data-ds-actualstart="${index}" type="time" value="${escapeHtml(row.actualStart || "")}" />
+          <span>–</span>
+          <input data-ds-actualend="${index}" type="time" value="${escapeHtml(row.actualEnd || "")}" />
+        </div></td>
       </tr>`;
       }).join("")}
     </tbody>
@@ -1638,12 +1662,20 @@ function bindDayStarterEvents(rows) {
     rows[Number(input.dataset.dsSkimend)].skimEnd = input.value;
     saveState();
   }));
-  document.querySelectorAll("[data-ds-est]").forEach(input => input.addEventListener("change", () => {
-    rows[Number(input.dataset.dsEst)].estMin = input.value;
+  document.querySelectorAll("[data-ds-planstart]").forEach(input => input.addEventListener("change", () => {
+    rows[Number(input.dataset.dsPlanstart)].planStart = input.value;
     saveState();
   }));
-  document.querySelectorAll("[data-ds-actual]").forEach(input => input.addEventListener("change", () => {
-    rows[Number(input.dataset.dsActual)].actualMin = input.value;
+  document.querySelectorAll("[data-ds-planend]").forEach(input => input.addEventListener("change", () => {
+    rows[Number(input.dataset.dsPlanend)].planEnd = input.value;
+    saveState();
+  }));
+  document.querySelectorAll("[data-ds-actualstart]").forEach(input => input.addEventListener("change", () => {
+    rows[Number(input.dataset.dsActualstart)].actualStart = input.value;
+    saveState();
+  }));
+  document.querySelectorAll("[data-ds-actualend]").forEach(input => input.addEventListener("change", () => {
+    rows[Number(input.dataset.dsActualend)].actualEnd = input.value;
     saveState();
   }));
   document.querySelectorAll("[data-ds-done]").forEach(input => input.addEventListener("change", () => {
@@ -1671,6 +1703,37 @@ function bindDayStarterEvents(rows) {
     saveState();
     renderDayStarter();
   }));
+  let dsDragFrom = null;
+  document.querySelectorAll("[data-ds-drag]").forEach(handle => {
+    handle.addEventListener("dragstart", event => {
+      dsDragFrom = Number(handle.dataset.dsDrag);
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", String(dsDragFrom));
+      handle.closest("tr")?.classList.add("dragging");
+    });
+    handle.addEventListener("dragend", () => {
+      dsDragFrom = null;
+      document.querySelectorAll(".day-starter-table tr.dragging, .day-starter-table tr.drag-over")
+        .forEach(tr => tr.classList.remove("dragging", "drag-over"));
+    });
+  });
+  document.querySelectorAll("tr[data-ds-row]").forEach(tr => {
+    tr.addEventListener("dragover", event => {
+      if (dsDragFrom === null) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      if (Number(tr.dataset.dsRow) !== dsDragFrom) tr.classList.add("drag-over");
+    });
+    tr.addEventListener("dragleave", () => tr.classList.remove("drag-over"));
+    tr.addEventListener("drop", event => {
+      event.preventDefault();
+      const to = Number(tr.dataset.dsRow);
+      if (dsDragFrom !== null && reorderDayStarterRow(rows, dsDragFrom, to)) {
+        saveState();
+        renderDayStarter();
+      }
+    });
+  });
 }
 
 function renderResearch() {
@@ -1941,12 +2004,14 @@ function openBrainEditor(item) {
   openEditorModal({
     title: "Brain Dump 수정",
     fields: [
+      { name: "title", label: "제목 (선택)", type: "text", value: item.title || "", full: true },
       { name: "text", label: "내용", type: "textarea", value: item.text, full: true },
       { name: "type", label: "Type", type: "select", value: item.type, options: ["bookmark", "idea", "question", "worry", "note"] },
       { name: "tag", label: "Tag", type: "text", value: item.tag || "" },
       { name: "processed", label: "처리 완료", type: "checkbox", value: !!item.processed, full: true },
     ],
     onSubmit: values => {
+      item.title = values.title.trim();
       item.text = values.text.trim() || item.text;
       item.type = values.type;
       item.tag = values.tag.trim();
@@ -2299,12 +2364,12 @@ function renderRosIntake() {
     <form id="rosIntakeForm" class="form-grid ros-intake-form">
       <select id="rosIntakeKind"><option value="Inbox">Inbox</option><option value="Meeting">Meeting</option><option value="Idea">Idea</option><option value="Request">Request</option></select>
       <input id="rosIntakeDate" type="date" />
-      <input id="rosIntakeTitle" placeholder="인입 항목 제목" required />
       <select id="rosIntakeSource">${optionList(settings.sources)}</select>
       <select id="rosIntakeTopic">${optionList(settings.topics)}</select>
       <select id="rosIntakeType">${optionList(settings.types)}</select>
       <select id="rosIntakeStatus">${optionList(settings.statuses, settings.statuses[0])}</select>
       <input id="rosIntakeDue" type="date" />
+      <input id="rosIntakeTitle" placeholder="인입 항목 제목" required />
       <textarea id="rosIntakeDetails" placeholder="메모 / 결정 / 액션 / 질문 / 리스크를 러프하게 기록"></textarea>
       <button class="icon-btn add-icon form-add-btn" type="submit" aria-label="Intake 추가" title="Intake 추가">+</button>
     </form>
@@ -2367,11 +2432,13 @@ function renderIntakeCard(item) {
     ${item.actions ? `<p><strong>Actions</strong><br>${formatMultiline(item.actions)}</p>` : ""}
     ${item.openQuestions ? `<p><strong>Open Questions</strong><br>${formatMultiline(item.openQuestions)}</p>` : ""}
     ${item.risks ? `<p><strong>Risks</strong><br>${formatMultiline(item.risks)}</p>` : ""}
-    <div class="actions">
-      <button class="small" data-intake-to-queue="${item.id}">${item.queued ? "Queue에 다시 추가" : "Queue로 보내기"}</button>
-      <button class="small ghost" data-intake-toggle="${item.id}">${isClosedStatus(item.status) ? "Reopen" : "Close"}</button>
+    <div class="card-footer">
+      <div class="actions">
+        <button class="small" data-intake-to-queue="${item.id}">${item.queued ? "Queue에 다시 추가" : "Queue로 보내기"}</button>
+        <button class="small ghost" data-intake-toggle="${item.id}">${isClosedStatus(item.status) ? "Reopen" : "Close"}</button>
+      </div>
+      ${iconActions("data-intake-edit", item.id, "data-intake-delete", item.id)}
     </div>
-    ${iconActions("data-intake-edit", item.id, "data-intake-delete", item.id)}
   </article>`;
 }
 
@@ -2614,10 +2681,12 @@ function renderRosMeetings() {
       ${rows.length ? rows.map(item => `<article class="card ${item.done ? "done" : ""}">
         <div class="card-title"><h4>${escapeHtml(formatDate(item.date))}</h4><span class="chip strong">${escapeHtml(item.track || "")}</span></div>
         <p>${formatMultiline(item.note)}</p>
-        <div class="actions">
-          <label class="checkbox-inline"><input type="checkbox" data-meeting-done="${escapeHtml(item.id)}" ${item.done ? "checked" : ""} /> 복기 완료</label>
+        <div class="card-footer">
+          <div class="actions">
+            <label class="checkbox-inline"><input type="checkbox" data-meeting-done="${escapeHtml(item.id)}" ${item.done ? "checked" : ""} /> 복기 완료</label>
+          </div>
+          ${iconActions("data-meeting-edit", item.id, "data-meeting-delete", item.id)}
         </div>
-        ${iconActions("data-meeting-edit", item.id, "data-meeting-delete", item.id)}
       </article>`).join("") : `<div class="empty">아직 미팅 복기 메모가 없습니다.</div>`}
     </div>
   </section>`;
