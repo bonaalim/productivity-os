@@ -152,6 +152,19 @@ h2 { margin: 0; font-size: 32px; letter-spacing: -0.04em; }
 .compact { grid-template-columns: minmax(220px, 1fr) 180px 150px 220px auto; }
 .task-form { grid-template-columns: minmax(220px, 1fr) 150px 115px 145px 200px minmax(170px, .8fr) 130px auto; }
 .study-form { grid-template-columns: minmax(220px, 1fr) 160px 160px 130px auto; margin-bottom: 14px; }
+.ros-meeting-form textarea { min-height: 220px; }
+.study-milestones { display: grid; gap: 6px; }
+.milestone-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel-2); }
+.milestone-row.done { opacity: .55; }
+.milestone-row.done .milestone-title { text-decoration: line-through; }
+.milestone-main { flex: 1; min-width: 0; }
+.milestone-title { font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; word-break: break-word; }
+.milestone-row .icon-btn { flex: none; }
+.milestone-add { display: flex; gap: 6px; align-items: center; }
+.milestone-add input[name="msTitle"] { flex: 1; min-width: 0; padding: 8px 12px; border-style: dashed; background: transparent; font-size: 13px; }
+.milestone-add input[type="date"] { width: 132px; flex: none; padding: 8px 10px; font-size: 13px; }
+.milestone-add button { flex: none; }
+.study-send-actions { gap: 6px; }
 .study-notes { margin-top: 8px; font-size: 13px; line-height: 1.5; opacity: .85; overflow-wrap: anywhere; word-break: break-word; }
 .brain-text { margin-top: 6px; font-size: 13px; font-weight: 400; line-height: 1.5; opacity: .9; overflow-wrap: anywhere; word-break: break-word; }
 .study-notes a { color: var(--accent, #4c8bf5); }

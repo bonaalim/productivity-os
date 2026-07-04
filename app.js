@@ -341,6 +341,8 @@ const defaultState = {
     track: item.track || "Personal",
     target: Number(item.target || 0),
     logged: Number(item.logged || 0),
+    notes: item.notes || "",
+    milestones: Array.isArray(item.milestones) ? item.milestones : [],
   })),
   tasks: (seedData.tasks || []).map(item => ({
     id: item.id || makeId("task"),
@@ -431,6 +433,10 @@ function normalizeState(input = {}) {
   const output = { ...base, ...input };
   output.brain = Array.isArray(input.brain) ? input.brain : base.brain;
   output.studies = Array.isArray(input.studies) ? input.studies : base.studies;
+  output.studies.forEach(item => {
+    if (!Array.isArray(item.milestones)) item.milestones = [];
+    ensureItemIds(item.milestones, "ms");
+  });
   output.tasks = Array.isArray(input.tasks) ? input.tasks : base.tasks;
   output.reviews = Array.isArray(input.reviews) ? input.reviews : base.reviews;
 
@@ -894,7 +900,10 @@ function applyLinkedDone(queueId, done) {
   const q = (state.ros.queueTasks || []).find(t => t.id === queueId);
   if (q) syncStatus(q.status, s => { q.status = s; });
   const task = state.tasks.find(t => t.sourceRosId === queueId);
-  if (task) task.done = done;
+  if (task) {
+    task.done = done;
+    syncDayStarterRowsForTask(task.id, done);
+  }
   forEachDailyItem(item => {
     if (item.taskId === queueId) syncStatus(item.status, s => { item.status = s; });
   });
@@ -1028,7 +1037,7 @@ function renderDashboard() {
         <span class="chip strong">${percent}%</span>
       </div>
       <div class="progress"><span style="width:${percent}%"></span></div>
-      <div class="meta"><span class="chip">${escapeHtml(item.bucket)}</span><span class="chip">${escapeHtml(item.track)}</span><span class="chip">${item.logged}/${item.target}h</span></div>
+      <div class="meta"><span class="chip">${escapeHtml(item.bucket)}</span><span class="chip">${escapeHtml(item.track)}</span><span class="chip">${item.logged}/${item.target}h</span>${(item.milestones || []).length ? `<span class="chip">MS ${item.milestones.filter(ms => ms.done).length}/${item.milestones.length}</span>` : ""}</div>
     </div>`;
   }).join("") : `<div class="empty">연구 공부 항목이 없습니다.</div>`;
 
@@ -1165,19 +1174,188 @@ function renderStudy() {
     saveState();
     render();
   }));
+
+  bindStudyMilestoneEvents();
+  bindStudySendEvents();
+}
+
+function findStudyMilestone(studyId, msId) {
+  const item = state.studies.find(s => s.id === studyId);
+  const ms = (item?.milestones || []).find(m => m.id === msId);
+  return { item, ms };
+}
+
+function bindStudyMilestoneEvents() {
+  document.querySelectorAll("[data-milestone-toggle]").forEach(input => input.addEventListener("change", () => {
+    const { ms } = findStudyMilestone(input.dataset.study, input.dataset.ms);
+    if (ms) ms.done = input.checked;
+    saveState();
+    render();
+  }));
+  document.querySelectorAll("[data-milestone-delete]").forEach(btn => btn.addEventListener("click", () => {
+    const { item, ms } = findStudyMilestone(btn.dataset.study, btn.dataset.ms);
+    if (!item || !ms || !askDelete(ms.title || "마일스톤")) return;
+    item.milestones = item.milestones.filter(m => m.id !== ms.id);
+    saveState();
+    render();
+  }));
+  document.querySelectorAll("[data-milestone-add]").forEach(form => form.addEventListener("submit", event => {
+    event.preventDefault();
+    const item = state.studies.find(s => s.id === form.dataset.milestoneAdd);
+    const title = form.querySelector('[name="msTitle"]').value.trim();
+    if (!item || !title) return;
+    if (!Array.isArray(item.milestones)) item.milestones = [];
+    item.milestones.push({ id: makeId("ms"), title, due: form.querySelector('[name="msDue"]').value || "", done: false });
+    saveState();
+    render();
+  }));
+}
+
+function bindStudySendEvents() {
+  const markSent = btn => {
+    btn.textContent = "✓ 추가됨";
+    btn.disabled = true;
+  };
+  document.querySelectorAll("[data-study-to-task]").forEach(btn => btn.addEventListener("click", () => {
+    const item = state.studies.find(s => s.id === btn.dataset.studyToTask);
+    if (!item) return;
+    const result = sendStudyToTaskMatrix(item);
+    if (!result.ok) return alert(result.reason);
+    saveState();
+    markSent(btn);
+  }));
+  document.querySelectorAll("[data-study-to-ros]").forEach(btn => btn.addEventListener("click", () => {
+    const item = state.studies.find(s => s.id === btn.dataset.studyToRos);
+    if (!item) return;
+    const result = sendStudyToRosQueue(item);
+    if (!result.ok) return alert(result.reason);
+    saveState();
+    markSent(btn);
+  }));
+  document.querySelectorAll("[data-study-to-ds]").forEach(btn => btn.addEventListener("click", () => {
+    const item = state.studies.find(s => s.id === btn.dataset.studyToDs);
+    if (!item) return;
+    const linkedTask = state.tasks.find(t => t.sourceStudyId === item.id && !t.done);
+    const result = sendLabelToTodayDayStarter(item.topic, linkedTask ? { source: "task", refId: linkedTask.id } : null);
+    if (!result.ok) return alert(result.reason);
+    saveState();
+    markSent(btn);
+  }));
+  document.querySelectorAll("[data-milestone-to-ds]").forEach(btn => btn.addEventListener("click", () => {
+    const { item, ms } = findStudyMilestone(btn.dataset.study, btn.dataset.ms);
+    if (!item || !ms) return;
+    const result = sendLabelToTodayDayStarter(`${item.topic} · ${ms.title}`);
+    if (!result.ok) return alert(result.reason);
+    saveState();
+    btn.textContent = "✓";
+    btn.disabled = true;
+  }));
 }
 
 function renderStudyCard(item) {
   const target = Number(item.target || 0);
   const logged = Number(item.logged || 0);
   const percent = target > 0 ? Math.min(100, Math.round(logged / target * 100)) : 0;
+  const milestones = item.milestones || [];
+  const msDone = milestones.filter(ms => ms.done).length;
   return `<article class="card">
     <div class="card-title"><h4>${escapeHtml(item.topic)}</h4><span class="chip strong">${escapeHtml(item.bucket)}</span></div>
     <div class="progress"><span style="width:${percent}%"></span></div>
-    <div class="meta"><span class="chip">${escapeHtml(item.track)}</span><span class="chip">${logged}/${target}h</span><span class="chip">${percent}%</span></div>
+    <div class="meta"><span class="chip">${escapeHtml(item.track)}</span><span class="chip">${logged}/${target}h</span><span class="chip">${percent}%</span>${milestones.length ? `<span class="chip ${msDone === milestones.length ? "strong" : ""}">마일스톤 ${msDone}/${milestones.length}</span>` : ""}</div>
     ${item.notes ? `<p class="study-notes">${linkifyNotes(item.notes)}</p>` : ""}
+    <div class="study-milestones">
+      ${milestones.map(ms => `<div class="milestone-row ${ms.done ? "done" : ""}">
+        <label class="checkbox-inline milestone-main">
+          <input type="checkbox" data-milestone-toggle data-study="${escapeHtml(item.id)}" data-ms="${escapeHtml(ms.id)}" ${ms.done ? "checked" : ""} />
+          <span class="milestone-title">${escapeHtml(ms.title)}</span>
+        </label>
+        ${ms.due ? `<span class="chip">${escapeHtml(formatDate(ms.due))}</span>` : ""}
+        <button class="icon-btn milestone-send" type="button" title="오늘 Day Starter로 보내기" aria-label="오늘 Day Starter로 보내기" data-milestone-to-ds data-study="${escapeHtml(item.id)}" data-ms="${escapeHtml(ms.id)}">↗</button>
+        <button class="icon-btn milestone-remove" type="button" title="마일스톤 삭제" aria-label="마일스톤 삭제" data-milestone-delete data-study="${escapeHtml(item.id)}" data-ms="${escapeHtml(ms.id)}">×</button>
+      </div>`).join("")}
+      <form class="milestone-add" data-milestone-add="${escapeHtml(item.id)}">
+        <input name="msTitle" placeholder="+ 마일스톤 추가 (예: 3장까지 정리)" required />
+        <input name="msDue" type="date" title="목표일 (선택)" aria-label="목표일 (선택)" />
+        <button class="small ghost" type="submit">추가</button>
+      </form>
+    </div>
+    <div class="actions study-send-actions">
+      <button class="small ghost" type="button" data-study-to-task="${escapeHtml(item.id)}">→ Task Matrix</button>
+      <button class="small ghost" type="button" data-study-to-ros="${escapeHtml(item.id)}">→ ROS Queue</button>
+      <button class="small ghost" type="button" data-study-to-ds="${escapeHtml(item.id)}">→ 오늘 Day Starter</button>
+    </div>
     ${iconActions("data-study-edit", item.id, "data-study-delete", item.id)}
   </article>`;
+}
+
+// Study 항목을 Task Matrix로 전송. 미완료 연결 작업(직접 전송분 또는 Study→ROS Queue를
+// 거쳐 자동 동기화된 작업)이 이미 있으면 중복 생성하지 않음.
+function sendStudyToTaskMatrix(item) {
+  const linkedQueueIds = new Set((state.ros.queueTasks || []).filter(q => q.sourceStudyId === item.id).map(q => q.id));
+  if (state.tasks.some(t => (t.sourceStudyId === item.id || linkedQueueIds.has(t.sourceRosId)) && !t.done)) {
+    return { ok: false, reason: "이미 Task Matrix에 미완료 항목으로 있습니다." };
+  }
+  const taskAreas = state.ros.settings.taskAreas || [];
+  state.tasks.unshift({
+    id: makeId("task"),
+    title: item.topic,
+    area: taskAreas.includes("Study") ? "Study" : (taskAreas[0] || "Study"),
+    priority: "Medium",
+    source: "Study Plan",
+    followUp: false,
+    notes: item.notes || "",
+    due: "",
+    quadrant: "schedule",
+    done: false,
+    sourceStudyId: item.id,
+  });
+  return { ok: true };
+}
+
+// Study 항목을 ROS Queue로 전송. nextAction에는 첫 미완료 마일스톤을 채움.
+function sendStudyToRosQueue(item) {
+  if ((state.ros.queueTasks || []).some(t => t.sourceStudyId === item.id && !isClosedStatus(t.status))) {
+    return { ok: false, reason: "이미 ROS Queue에 열린 항목으로 있습니다." };
+  }
+  const settings = state.ros.settings;
+  const num = String((state.ros.queueTasks || []).length + 1).padStart(3, "0");
+  state.ros.queueTasks.unshift({
+    id: `ROS-${num}`,
+    title: item.topic,
+    topic: (settings.topics || []).includes("Study") ? "Study" : (settings.topics?.[0] || "General"),
+    track: settings.tracks?.[0] || "Research",
+    type: (settings.types || []).includes("Research Support") ? "Research Support" : (settings.types?.[0] || ""),
+    status: settings.statuses?.[0] || "Todo",
+    urgency: settings.urgencyLevels?.[1] || settings.urgencyLevels?.[0] || "보통",
+    effortHrs: item.target || "",
+    due: "",
+    nextAction: (item.milestones || []).find(ms => !ms.done)?.title || "",
+    stopRule: "",
+    notes: item.notes || "",
+    sourceStudyId: item.id,
+  });
+  // 이미 Task Matrix로 전송된 작업이 있으면 Queue와 연결해 자동 동기화 중복 생성을 방지.
+  const linkedTask = state.tasks.find(t => t.sourceStudyId === item.id && !t.done && !t.sourceRosId);
+  if (linkedTask) linkedTask.sourceRosId = `ROS-${num}`;
+  return { ok: true };
+}
+
+// 라벨을 오늘 Day Starter에 추가. 첫 빈 행을 채우고, 없으면 새 행 추가. 같은 라벨/링크가 이미 있으면 중복 방지.
+function sendLabelToTodayDayStarter(label, link = null) {
+  const rows = ensureDayStarterRows(todayKey());
+  const duplicate = rows.some(row => (link && row.source === link.source && row.refId === link.refId) || (row.label && row.label === label));
+  if (duplicate) return { ok: false, reason: "오늘 Day Starter에 이미 있습니다." };
+  let row = rows.find(r => r.source === "manual" && !r.label && !r.done);
+  if (!row) {
+    row = defaultDayStarterRow();
+    rows.push(row);
+  }
+  row.label = label;
+  if (link) {
+    row.source = link.source;
+    row.refId = link.refId;
+  }
+  return { ok: true };
 }
 
 const quadrants = {
@@ -1308,7 +1486,10 @@ function renderTasks() {
     if (task) {
       const next = !task.done;
       if (task.sourceRosId) applyLinkedDone(task.sourceRosId, next);
-      else task.done = next;
+      else {
+        task.done = next;
+        syncDayStarterRowsForTask(task.id, next);
+      }
     }
     saveState();
     render();
@@ -1528,13 +1709,18 @@ function reorderDayStarterRow(rows, from, to) {
   return true;
 }
 
-// Day Starter 행의 done 표시 상태. task 참조 행은 항상 task.done을 따름(양방향), 그 외는 행 자체 done.
+// Day Starter 행의 done은 날짜별 기록(row.done)만 사용. task 참조 행이라도 표시용으로
+// task.done을 따라가지 않음 — 같은 task를 여러 날짜에 올렸을 때 한 날짜 체크가 다른
+// 날짜까지 번지는 문제 방지. Task Matrix/ROS로의 전파는 체크 시점에 핸들러가 수행.
 function dayStarterRowDone(row) {
-  if (row.source === "task" && row.refId) {
-    const task = state.tasks.find(t => t.id === row.refId);
-    if (task) return !!task.done;
-  }
   return !!row.done;
+}
+
+// Task Matrix/ROS 쪽에서 task 완료가 확정될 때, 오늘 Day Starter의 해당 task 행에만 반영.
+function syncDayStarterRowsForTask(taskId, done, date = todayKey()) {
+  (state.dailyKickoff[date] || []).forEach(row => {
+    if (row.source === "task" && row.refId === taskId) row.done = done;
+  });
 }
 
 function ensureDayStarterRows(date) {
@@ -2260,7 +2446,7 @@ function openMeetingNoteEditor(item) {
     fields: [
       { name: "date", label: "Date", type: "date", value: item.date || "" },
       { name: "track", label: "Meeting Type", type: "select", value: item.track || "", options: settings.topics || [] },
-      { name: "note", label: "Note", type: "textarea", value: item.note || "", full: true },
+      { name: "note", label: "Note", type: "textarea", value: item.note || "", full: true, rows: 14 },
       { name: "done", label: "복기 완료", type: "checkbox", value: !!item.done },
     ],
     onSubmit: values => {
