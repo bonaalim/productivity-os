@@ -992,3 +992,31 @@ body[data-theme="dark"] .icon-btn.trash-icon {
 /* iOS safe-area: keep the brand/toggle clear of the status bar / Dynamic Island */
 .sidebar { padding-top: calc(24px + env(safe-area-inset-top)); }
 #app.sidebar-collapsed .sidebar { padding-top: calc(20px + env(safe-area-inset-top)); }
+
+/* 미팅 노트 서식 툴바: textarea에서 텍스트를 드래그 선택하면 표시 */
+.fmt-toolbar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.fmt-toolbar button {
+  width: 30px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+.fmt-toolbar button:hover { background: var(--panel); border-color: var(--accent); }
+
+/* 주간 스냅샷: 요일 행 클릭 시 그날 항목 펼치기 */
+.snap-day-row { cursor: pointer; }
+.snap-day-row:hover td { background: var(--soft); }
+.snap-caret { display: inline-block; width: 12px; color: var(--muted); }
+.snap-detail-row td { background: var(--soft); }
+.snap-item-list { margin: 4px 0; display: grid; gap: 4px; }
+.snap-item-list .chip { margin-right: 4px; }
+.snap-item-done { opacity: .55; text-decoration: line-through; }

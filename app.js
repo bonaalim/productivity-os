@@ -281,9 +281,14 @@ function dailyBucketShape(bucket) {
   return {
     deepWork: Array.isArray(b.deepWork) ? b.deepWork : [],
     processing: Array.isArray(b.processing) ? b.processing : [],
+    study: Array.isArray(b.study) ? b.study : [],
     anchors: Array.isArray(b.anchors) ? b.anchors : [],
   };
 }
+
+// Daily Execution 섹션 정의. 순서가 화면 표시 순서.
+const dailySections = ["deepWork", "study", "processing"];
+const dailySectionLabels = { deepWork: "Deep Work", study: "Study", processing: "Processing" };
 
 // ROS daily를 날짜별 버킷 형태 { [dateKey]: {deepWork,processing,anchors} }로 정규화.
 // 레거시(top-level deepWork/processing 배열)는 오늘 날짜 버킷으로 래핑.
@@ -471,9 +476,11 @@ function normalizeState(input = {}) {
   };
   ensureItemIds(output.ros.questions, "question");
   ensureItemIds(output.ros.weeklyReviews, "weekly");
+  ensureItemIds(output.reviews, "review");
   Object.values(output.ros.daily).forEach(bucket => {
     ensureItemIds(bucket.deepWork, "daily");
     ensureItemIds(bucket.processing, "daily");
+    ensureItemIds(bucket.study, "daily");
   });
   // Now/Later → urgency(3단계) 마이그레이션: 기존 Now=높음, 그 외=낮음(현재 배치 보존).
   (output.ros.queueTasks || []).forEach(task => {
@@ -620,10 +627,14 @@ async function loadStateFromRemote() {
     if (error) throw error;
 
     if (data?.data) {
-      state = normalizeState(data.data);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      const incoming = normalizeState(data.data);
+      // 원격 데이터가 실제로 다를 때만 교체/리렌더. 작성 중이던 폼 입력은 보존.
+      if (JSON.stringify(incoming) !== JSON.stringify(state)) {
+        state = incoming;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        renderPreservingDrafts();
+      }
       setSyncStatus("동기화 완료", "ok");
-      render();
     } else {
       await pushStateToRemote();
     }
@@ -646,9 +657,13 @@ async function initSupabaseAuth() {
   if (currentUser) await loadStateFromRemote();
 
   supabaseClient.auth.onAuthStateChange(async (_event, session) => {
-    currentUser = session?.user || null;
+    // 토큰 갱신 등으로 세션 이벤트가 반복 발생해도, 실제 사용자 변경일 때만
+    // 원격 상태를 다시 불러온다. (입력 중 리렌더로 내용이 날아가는 문제 방지)
+    const nextUser = session?.user || null;
+    const userChanged = (nextUser?.id || null) !== (currentUser?.id || null);
+    currentUser = nextUser;
     updateAuthUI();
-    if (currentUser) await loadStateFromRemote();
+    if (currentUser && userChanged) await loadStateFromRemote();
   });
 }
 
@@ -814,6 +829,68 @@ function formatMultiline(value) {
   return escapeHtml(value || "-").replaceAll("\n", "<br>");
 }
 
+// **볼드** / *이탤릭* / ~~취소선~~ 마커를 살린 멀티라인 렌더링 (미팅 노트용).
+function formatRichText(value) {
+  return escapeHtml(value || "-")
+    .replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/~~([^~\n]+)~~/g, "<del>$1</del>")
+    .replace(/\*([^*\n]+)\*/g, "<em>$1</em>")
+    .replaceAll("\n", "<br>");
+}
+
+// textarea에 서식 툴바 부착: 텍스트를 드래그로 선택하면 B/I/S 버튼이 나타나고,
+// 클릭 시 선택 영역을 마커로 감싸거나(이미 감싸져 있으면) 해제한다.
+function attachFormattingToolbar(textarea) {
+  if (!textarea || textarea.dataset.fmtBound) return;
+  textarea.dataset.fmtBound = "1";
+  const bar = document.createElement("div");
+  bar.className = "fmt-toolbar";
+  bar.hidden = true;
+  bar.innerHTML = `
+    <button type="button" data-fmt="**" title="굵게"><strong>B</strong></button>
+    <button type="button" data-fmt="*" title="기울임"><em>I</em></button>
+    <button type="button" data-fmt="~~" title="취소선"><del>S</del></button>`;
+  textarea.insertAdjacentElement("beforebegin", bar);
+
+  const update = () => { bar.hidden = textarea.selectionStart === textarea.selectionEnd; };
+  ["select", "keyup", "mouseup"].forEach(type => textarea.addEventListener(type, update));
+  textarea.addEventListener("blur", event => {
+    if (!bar.contains(event.relatedTarget)) bar.hidden = true;
+  });
+
+  const applyWrap = marker => {
+    const { selectionStart: start, selectionEnd: end, value } = textarea;
+    if (start === end) return;
+    const selected = value.slice(start, end);
+    const before = value.slice(0, start);
+    const after = value.slice(end);
+    let next, nextStart, nextEnd;
+    if (selected.startsWith(marker) && selected.endsWith(marker) && selected.length >= marker.length * 2) {
+      const inner = selected.slice(marker.length, selected.length - marker.length);
+      next = before + inner + after;
+      nextStart = start;
+      nextEnd = start + inner.length;
+    } else if (before.endsWith(marker) && after.startsWith(marker)) {
+      next = before.slice(0, before.length - marker.length) + selected + after.slice(marker.length);
+      nextStart = start - marker.length;
+      nextEnd = nextStart + selected.length;
+    } else {
+      next = before + marker + selected + marker + after;
+      nextStart = start + marker.length;
+      nextEnd = nextStart + selected.length;
+    }
+    textarea.value = next;
+    textarea.focus();
+    textarea.setSelectionRange(nextStart, nextEnd);
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+
+  bar.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("mousedown", event => event.preventDefault());
+    btn.addEventListener("click", () => applyWrap(btn.dataset.fmt));
+  });
+}
+
 // 메모 텍스트를 HTML로 변환: 이스케이프 후 URL을 클릭 가능한 링크로, 줄바꿈은 <br>.
 function linkifyNotes(value) {
   return escapeHtml(value || "")
@@ -848,20 +925,20 @@ function getOpenQueueTasks() {
 
 // 특정 날짜의 daily 버킷을 읽기 전용으로 반환(없으면 임시 빈 버킷, state 미변경).
 function readRosDailyBucket(date = currentRosDailyDate) {
-  return state.ros?.daily?.[date] || { deepWork: [], processing: [], anchors: [] };
+  return state.ros?.daily?.[date] ? dailyBucketShape(state.ros.daily[date]) : { deepWork: [], processing: [], study: [], anchors: [] };
 }
 
 // 특정 날짜의 daily 버킷을 반환(없으면 생성 후 영속). 쓰기용.
 function ensureRosDailyBucket(date = currentRosDailyDate) {
   if (!state.ros.daily || typeof state.ros.daily !== "object") state.ros.daily = {};
-  if (!state.ros.daily[date]) state.ros.daily[date] = { deepWork: [], processing: [], anchors: [] };
+  state.ros.daily[date] = dailyBucketShape(state.ros.daily[date]);
   return state.ros.daily[date];
 }
 
 // 모든 날짜 버킷의 daily 항목을 순회 (done 전파용).
 function forEachDailyItem(fn) {
   Object.values(state.ros.daily || {}).forEach(bucket =>
-    ["deepWork", "processing"].forEach(sec => (bucket?.[sec] || []).forEach(fn)));
+    dailySections.forEach(sec => (bucket?.[sec] || []).forEach(fn)));
 }
 
 function getDailyWorkItems(date = todayKey()) {
@@ -869,10 +946,13 @@ function getDailyWorkItems(date = todayKey()) {
   const deep = (daily.deepWork || [])
     .filter(item => item.title || item.taskId)
     .map(item => ({ ...item, label: item.title, section: "Deep Work" }));
+  const study = (daily.study || [])
+    .filter(item => item.title || item.taskId)
+    .map(item => ({ ...item, label: item.title, section: "Study" }));
   const processing = (daily.processing || [])
     .filter(item => item.item || item.title || item.action)
     .map(item => ({ ...item, label: item.item || item.title || item.action, section: "Processing" }));
-  return [...deep, ...processing];
+  return [...deep, ...study, ...processing];
 }
 
 function getRosDailyIncompleteCount() {
@@ -882,7 +962,7 @@ function getRosDailyIncompleteCount() {
 // daily 항목을 id로 찾아 그 항목과 소속 섹션(deepWork/processing)을 반환. 현재 네비 날짜 버킷 기준.
 function findDailyEntry(id) {
   const bucket = readRosDailyBucket();
-  for (const section of ["deepWork", "processing"]) {
+  for (const section of dailySections) {
     const item = (bucket[section] || []).find(entry => entry.id === id);
     if (item) return { section, item };
   }
@@ -906,6 +986,29 @@ function applyLinkedDone(queueId, done) {
   }
   forEachDailyItem(item => {
     if (item.taskId === queueId) syncStatus(item.status, s => { item.status = s; });
+  });
+}
+
+// task(Task Matrix id)를 참조하는 모든 날짜의 Day Starter 행 라벨을 갱신.
+function updateDayStarterLabelsForTask(taskId, label) {
+  if (!taskId || !label) return;
+  Object.values(state.dailyKickoff || {}).forEach(rows => (rows || []).forEach(row => {
+    if (row.source === "task" && row.refId === taskId) row.label = label;
+  }));
+}
+
+// 상위 계층(Queue) 수정의 하향 전파: Queue 제목/기한 변경을 Task Matrix,
+// 모든 날짜의 Daily Execution 항목, Day Starter 행에 반영한다.
+// 하위 계층에서의 수정은 상위로 전파하지 않는다.
+function propagateQueueTaskEdit(queueTask) {
+  const linkedTask = state.tasks.find(t => t.sourceRosId === queueTask.id);
+  if (linkedTask) {
+    linkedTask.title = queueTask.title;
+    linkedTask.due = queueTask.due || "";
+    updateDayStarterLabelsForTask(linkedTask.id, queueTask.title);
+  }
+  forEachDailyItem(item => {
+    if (item.taskId === queueTask.id) item.title = queueTask.title;
   });
 }
 
@@ -985,6 +1088,33 @@ function render() {
     review: renderReview,
   };
   renderers[page.id]?.();
+}
+
+// 원격 동기화 등 사용자가 의도하지 않은 리렌더에서, 작성 중이던 폼 입력과
+// 포커스/커서 위치를 보존한 채 다시 그린다.
+function renderPreservingDrafts() {
+  const drafts = [];
+  document.querySelectorAll("#content input[id], #content textarea[id]").forEach(el => {
+    if (el.type === "checkbox" || el.type === "radio") return;
+    if (el.value === el.defaultValue) return;
+    drafts.push({ id: el.id, value: el.value });
+  });
+  const active = document.activeElement;
+  const focus = active && active.id && ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName)
+    ? { id: active.id, start: active.selectionStart ?? null, end: active.selectionEnd ?? null }
+    : null;
+  render();
+  drafts.forEach(draft => {
+    const el = document.getElementById(draft.id);
+    if (el) el.value = draft.value;
+  });
+  if (!focus) return;
+  const el = document.getElementById(focus.id);
+  if (!el) return;
+  el.focus();
+  if (focus.start !== null && typeof el.setSelectionRange === "function") {
+    try { el.setSelectionRange(focus.start, focus.end); } catch { /* number/date 등 미지원 타입 */ }
+  }
 }
 
 function bindKeyboardClick(element, callback) {
@@ -2118,6 +2248,7 @@ function openEditorModal({ title, fields, onSubmit, submitText = "저장" }) {
   });
   const first = backdrop.querySelector("input, textarea, select, button");
   if (first) first.focus();
+  return backdrop;
 }
 
 // 읽기 전용 정보 팝업(폼 아님). 기존 모달 마크업/CSS 재사용.
@@ -2139,6 +2270,7 @@ function openInfoModal({ title, bodyHtml }) {
   backdrop.querySelector(".modal-cancel").addEventListener("click", close);
   backdrop.addEventListener("click", event => { if (event.target === backdrop) close(); });
   document.addEventListener("keydown", onKey);
+  return backdrop;
 }
 
 // 선택한 주(월~일)의 ROS Daily / Task Matrix / Queue 요약 스냅샷.
@@ -2149,7 +2281,7 @@ function openWeeklySnapshotModal(weekStartKey) {
   for (let i = 0; i < 7; i++) {
     const k = toDateKey(addDays(start, i));
     const items = getDailyWorkItems(k);
-    days.push({ k, name: weekdayNames[i], total: items.length, done: items.filter(it => isClosedStatus(it.status)).length });
+    days.push({ k, name: weekdayNames[i], items, total: items.length, done: items.filter(it => isClosedStatus(it.status)).length });
   }
   const weekTotal = days.reduce((a, d) => a + d.total, 0);
   const weekDone = days.reduce((a, d) => a + d.done, 0);
@@ -2158,7 +2290,7 @@ function openWeeklySnapshotModal(weekStartKey) {
   const queueOpen = getOpenQueueTasks().length;
   const objectives = (state.ros.weeklyReviews || []).filter(r => r.weekStart === weekStartKey);
   const body = `
-    <p class="section-subtitle">${escapeHtml(formatWeekRange(weekStartKey))} 주간 요약 (읽기 전용)</p>
+    <p class="section-subtitle">${escapeHtml(formatWeekRange(weekStartKey))} 주간 요약 (읽기 전용) · 요일을 클릭하면 그날 항목이 펼쳐집니다</p>
     <div class="snapshot-stats">
       <div class="snapshot-stat"><span class="snapshot-num">${weekDone}/${weekTotal}</span><span class="muted">ROS Daily 완료/전체</span></div>
       <div class="snapshot-stat"><span class="snapshot-num">${tasksDone}/${tasksOpen + tasksDone}</span><span class="muted">Task Matrix done/전체</span></div>
@@ -2166,11 +2298,29 @@ function openWeeklySnapshotModal(weekStartKey) {
     </div>
     <div class="table-wrap compact-table"><table class="data-table">
       <thead><tr><th>요일</th><th>날짜</th><th>ROS Daily 완료/전체</th></tr></thead>
-      <tbody>${days.map(d => `<tr><td>${d.name}</td><td>${escapeHtml(d.k)}</td><td>${d.done}/${d.total}</td></tr>`).join("")}</tbody>
+      <tbody>${days.map(d => `
+        <tr class="snap-day-row" data-snap-day="${escapeHtml(d.k)}" title="클릭하면 항목 보기">
+          <td><span class="snap-caret">▸</span> ${d.name}</td><td>${escapeHtml(d.k)}</td><td>${d.done}/${d.total}</td>
+        </tr>
+        <tr class="snap-detail-row" data-snap-detail="${escapeHtml(d.k)}" hidden>
+          <td colspan="3">${d.items.length ? `<ul class="plain-list snap-item-list">${d.items.map(it => `
+            <li class="${isClosedStatus(it.status) ? "snap-item-done" : ""}">
+              <span class="chip">${escapeHtml(it.section)}</span>
+              ${escapeHtml(it.label || "Untitled")}
+              <span class="muted">· ${escapeHtml(it.status || "No status")}</span>
+            </li>`).join("")}</ul>` : `<span class="muted">이 날짜의 ROS Daily 항목 없음</span>`}</td>
+        </tr>`).join("")}</tbody>
     </table></div>
     ${objectives.length ? `<p><strong>이 주 ROS Weekly Objective</strong></p><ul class="plain-list">${objectives.map(o => `<li>${escapeHtml(o.objective || "(제목 없음)")}</li>`).join("")}</ul>` : `<p class="muted">이 주에 작성된 ROS Weekly Objective 없음.</p>`}
   `;
-  openInfoModal({ title: "주간 스냅샷", bodyHtml: body });
+  const backdrop = openInfoModal({ title: "주간 스냅샷", bodyHtml: body });
+  backdrop.querySelectorAll("[data-snap-day]").forEach(row => row.addEventListener("click", () => {
+    const detail = backdrop.querySelector(`[data-snap-detail="${CSS.escape(row.dataset.snapDay)}"]`);
+    if (!detail) return;
+    detail.hidden = !detail.hidden;
+    const caret = row.querySelector(".snap-caret");
+    if (caret) caret.textContent = detail.hidden ? "▸" : "▾";
+  }));
 }
 
 function trashIconSvg() {
@@ -2250,6 +2400,8 @@ function openTaskEditor(task) {
         followUp: values.followUp,
         done: values.done,
       });
+      // Task Matrix 제목 수정도 이를 참조하는 Day Starter 행(하위)에 반영.
+      updateDayStarterLabelsForTask(task.id, task.title);
       saveState();
       render();
     },
@@ -2326,6 +2478,8 @@ function openQueueEditor(task) {
     ],
     onSubmit: values => {
       Object.assign(task, values, { title: values.title.trim() || task.title });
+      propagateQueueTaskEdit(task);
+      applyLinkedDone(task.id, isClosedStatus(task.status));
       saveState();
       renderResearch();
     },
@@ -2342,7 +2496,7 @@ function openDailyEditor(id) {
     fields: [
       { name: "title", label: "Title", type: "text", value: item.title || item.item || item.action || "", full: true },
       { name: "execDate", label: "실행 날짜", type: "date", value: currentDate },
-      { name: "section", label: "Section", type: "select", value: section, options: [{ value: "deepWork", label: "Deep Work" }, { value: "processing", label: "Processing" }] },
+      { name: "section", label: "Section", type: "select", value: section, options: dailySections.map(sec => ({ value: sec, label: dailySectionLabels[sec] })) },
       { name: "status", label: "Status", type: "select", value: item.status || "", options: statusOptions },
       { name: "taskId", label: "Task ID", type: "text", value: item.taskId || "" },
       { name: "timeboxHrs", label: "Timebox h", type: "number", value: item.timeboxHrs || "", step: "0.5", min: "0" },
@@ -2366,7 +2520,16 @@ function openDailyEditor(id) {
         const toBucket = ensureRosDailyBucket(targetDate);
         toBucket[targetSection].push(item);
       }
-      if (item.taskId) applyLinkedDone(item.taskId, isClosedStatus(item.status));
+      if (item.taskId) {
+        applyLinkedDone(item.taskId, isClosedStatus(item.status));
+        // Daily(중간 계층) 제목 수정은 Day Starter(하위)에만 반영, Queue(상위)는 그대로 둔다.
+        const linkedTask = state.tasks.find(t => t.sourceRosId === item.taskId);
+        if (linkedTask) {
+          (state.dailyKickoff[targetDate] || []).forEach(row => {
+            if (row.source === "task" && row.refId === linkedTask.id) row.label = item.title;
+          });
+        }
+      }
       saveState();
       renderResearch();
     },
@@ -2441,7 +2604,7 @@ function openQuestionEditor(id) {
 
 function openMeetingNoteEditor(item) {
   const settings = state.ros.settings;
-  openEditorModal({
+  const backdrop = openEditorModal({
     title: "Meeting Note 수정",
     fields: [
       { name: "date", label: "Date", type: "date", value: item.date || "" },
@@ -2450,11 +2613,14 @@ function openMeetingNoteEditor(item) {
       { name: "done", label: "복기 완료", type: "checkbox", value: !!item.done },
     ],
     onSubmit: values => {
-      Object.assign(item, values);
+      // 모달이 열린 사이 원격 동기화로 state가 교체됐을 수 있으므로 id로 다시 찾는다.
+      const target = (state.ros.meetingNotes || []).find(entry => entry.id === item.id) || item;
+      Object.assign(target, values);
       saveState();
       renderResearch();
     },
   });
+  attachFormattingToolbar(backdrop.querySelector('[data-modal-field="note"]'));
 }
 
 function openHabitSettingsModal() {
@@ -2704,6 +2870,7 @@ function renderQueueTable(rows) {
         <td class="wide-cell">${formatMultiline(task.nextAction || "")}</td>
         <td class="table-actions">
           <button class="small" data-queue-to-daily="${escapeHtml(task.id)}" data-daily-section="deepWork">Deep</button>
+          <button class="small ghost" data-queue-to-daily="${escapeHtml(task.id)}" data-daily-section="study">Study</button>
           <button class="small ghost" data-queue-to-daily="${escapeHtml(task.id)}" data-daily-section="processing">Processing</button>
           ${iconActions("data-queue-edit", task.id, "data-queue-delete", task.id)}
         </td>
@@ -2728,6 +2895,7 @@ function renderQueueCard(task) {
     <div class="actions">
       <select data-ros-queue-status="${escapeHtml(task.id)}">${optionList(settings.statuses, task.status)}</select>
       <button class="small" data-queue-to-daily="${escapeHtml(task.id)}" data-daily-section="deepWork">오늘 Deep Work로</button>
+      <button class="small ghost" data-queue-to-daily="${escapeHtml(task.id)}" data-daily-section="study">오늘 Study로</button>
       <button class="small ghost" data-queue-to-daily="${escapeHtml(task.id)}" data-daily-section="processing">오늘 Processing으로</button>
     </div>
     ${iconActions("data-queue-edit", task.id, "data-queue-delete", task.id)}
@@ -2737,6 +2905,7 @@ function renderQueueCard(task) {
 function renderRosDaily() {
   const daily = readRosDailyBucket();
   const deepRows = daily.deepWork || [];
+  const studyRows = daily.study || [];
   const processingRows = daily.processing || [];
   const openTasks = getOpenQueueTasks();
   const incomplete = getDailyWorkItems(currentRosDailyDate).filter(item => !isClosedStatus(item.status)).length;
@@ -2768,7 +2937,7 @@ function renderRosDaily() {
           <option value="manual">직접 입력</option>
           ${openTasks.map(task => `<option value="${escapeHtml(task.id)}">${escapeHtml(task.title)}</option>`).join("")}
         </select>
-        <select id="rosDailySection"><option value="deepWork">Deep Work</option><option value="processing">Processing</option></select>
+        <select id="rosDailySection">${dailySections.map(sec => `<option value="${sec}">${dailySectionLabels[sec]}</option>`).join("")}</select>
         <input id="rosDailyTitle" placeholder="직접 입력 시 제목" />
         <input id="rosDailyOneThing" placeholder="메모" />
         <input id="rosDailyTimebox" type="number" min="0" step="0.5" placeholder="h" />
@@ -2785,6 +2954,18 @@ function renderRosDaily() {
       </div>
       <div class="list">
         ${deepRows.length ? deepRows.map(item => renderDailyCard(item, "deepWork")).join("") : `<div class="empty">Deep Work 항목 없음</div>`}
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <h3>Study</h3>
+          <p class="section-subtitle">공부/이론/논문 읽기 등 학습 관련 항목.</p>
+        </div>
+      </div>
+      <div class="list">
+        ${studyRows.length ? studyRows.map(item => renderDailyCard(item, "study")).join("") : `<div class="empty">Study 항목 없음</div>`}
       </div>
     </div>
 
@@ -2807,7 +2988,7 @@ function renderDailyCard(item, section) {
   return `<article class="card ${isClosedStatus(item.status) ? "done" : ""}">
     <div class="card-title">
       <h4>${escapeHtml(title)}</h4>
-      <span class="chip strong">${escapeHtml(section === "deepWork" ? "Deep Work" : "Processing")}</span>
+      <span class="chip strong">${escapeHtml(dailySectionLabels[section] || section)}</span>
     </div>
     <div class="meta">
       ${item.taskId ? `<span class="chip">${escapeHtml(item.taskId)}</span>` : ""}
@@ -2882,7 +3063,7 @@ function renderRosMeetings() {
     <div class="list">
       ${rows.length ? rows.map(item => `<article class="card ${item.done ? "done" : ""}">
         <div class="card-title"><h4>${escapeHtml(formatDate(item.date))}</h4><span class="chip strong">${escapeHtml(item.track || "")}</span></div>
-        <p>${formatMultiline(item.note)}</p>
+        <p>${formatRichText(item.note)}</p>
         <div class="card-footer">
           <div class="actions">
             <label class="checkbox-inline"><input type="checkbox" data-meeting-done="${escapeHtml(item.id)}" ${item.done ? "checked" : ""} /> 복기 완료</label>
@@ -3005,7 +3186,7 @@ function addQueueTaskToDaily(taskId, section, date = currentRosDailyDate) {
     slot: (bucket[section] || []).length + 1,
     taskId: task.id,
     title: task.title,
-    oneThing: section === "deepWork" ? task.nextAction || "" : "",
+    oneThing: section === "processing" ? "" : task.nextAction || "",
     action: section === "processing" ? task.nextAction || "" : "",
     timeboxHrs: Number(task.effortHrs || 0),
     status: state.ros.settings.statuses[0] || "Todo",
@@ -3293,6 +3474,7 @@ function bindRosEvents() {
       saveState();
       renderResearch();
     });
+    attachFormattingToolbar(document.querySelector("#rosMeetingNote"));
   }
   document.querySelectorAll("[data-meeting-done]").forEach(input => input.addEventListener("change", () => {
     const item = state.ros.meetingNotes.find(entry => entry.id === input.dataset.meetingDone);
@@ -3441,19 +3623,49 @@ function renderReview() {
   document.querySelector("#reviewList").innerHTML = state.reviews.length ? state.reviews.map(review => `
     <article class="card">
       <div class="card-title"><h4>${escapeHtml(review.weekStart ? formatWeekRange(review.weekStart) : new Date(review.createdAt).toLocaleDateString("ko-KR"))}</h4><span class="chip">review</span></div>
-      <p><strong>완료/진전</strong><br>${escapeHtml(review.done || "-")}</p>
-      <p><strong>막힘/회피</strong><br>${escapeHtml(review.blocked || "-")}</p>
-      <p><strong>다음 주 핵심 3개</strong><br>${escapeHtml(review.next || "-")}</p>
-      <p><strong>시스템 수정점</strong><br>${escapeHtml(review.system || "-")}</p>
-      <div class="actions"><button class="small danger" data-review-delete="${review.id}">삭제</button></div>
+      <p><strong>완료/진전</strong><br>${formatMultiline(review.done)}</p>
+      <p><strong>막힘/회피</strong><br>${formatMultiline(review.blocked)}</p>
+      <p><strong>다음 주 핵심 3개</strong><br>${formatMultiline(review.next)}</p>
+      <p><strong>시스템 수정점</strong><br>${formatMultiline(review.system)}</p>
+      ${iconActions("data-review-edit", review.id, "data-review-delete", review.id)}
     </article>
   `).join("") : `<div class="empty">아직 저장된 리뷰가 없습니다.</div>`;
 
+  document.querySelectorAll("[data-review-edit]").forEach(btn => btn.addEventListener("click", () => {
+    const review = state.reviews.find(r => r.id === btn.dataset.reviewEdit);
+    if (review) openReviewEditor(review);
+  }));
   document.querySelectorAll("[data-review-delete]").forEach(btn => btn.addEventListener("click", () => {
+    const review = state.reviews.find(r => r.id === btn.dataset.reviewDelete);
+    if (!askDelete(review ? `${formatWeekRange(review.weekStart)} 리뷰` : "리뷰")) return;
     state.reviews = state.reviews.filter(r => r.id !== btn.dataset.reviewDelete);
     saveState();
     render();
   }));
+}
+
+function openReviewEditor(review) {
+  openEditorModal({
+    title: "Weekly Review 수정",
+    fields: [
+      { name: "weekStart", label: "Week Start (월요일)", type: "date", value: review.weekStart || "" },
+      { name: "done", label: "이번 주 완료 / 진전", type: "textarea", value: review.done || "", full: true },
+      { name: "blocked", label: "막힌 것 / 회피한 것", type: "textarea", value: review.blocked || "", full: true },
+      { name: "next", label: "다음 주 핵심 3개", type: "textarea", value: review.next || "", full: true },
+      { name: "system", label: "시스템 수정점", type: "textarea", value: review.system || "", full: true },
+    ],
+    onSubmit: values => {
+      const target = state.reviews.find(r => r.id === review.id) || review;
+      Object.assign(target, values, {
+        done: values.done.trim(),
+        blocked: values.blocked.trim(),
+        next: values.next.trim(),
+        system: values.system.trim(),
+      });
+      saveState();
+      render();
+    },
+  });
 }
 
 function setupImportExport() {
