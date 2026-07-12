@@ -287,7 +287,7 @@ function dailyBucketShape(bucket) {
 }
 
 // Daily Execution 섹션 정의. 순서가 화면 표시 순서.
-const dailySections = ["deepWork", "study", "processing"];
+const dailySections = ["deepWork", "processing", "study"];
 const dailySectionLabels = { deepWork: "Deep Work", study: "Study", processing: "Processing" };
 
 // ROS daily를 날짜별 버킷 형태 { [dateKey]: {deepWork,processing,anchors} }로 정규화.
@@ -952,7 +952,7 @@ function getDailyWorkItems(date = todayKey()) {
   const processing = (daily.processing || [])
     .filter(item => item.item || item.title || item.action)
     .map(item => ({ ...item, label: item.item || item.title || item.action, section: "Processing" }));
-  return [...deep, ...study, ...processing];
+  return [...deep, ...processing, ...study];
 }
 
 function getRosDailyIncompleteCount() {
@@ -2959,6 +2959,16 @@ function renderRosDaily() {
 
     <div class="panel">
       <div class="panel-header">
+        <h3>Processing / Execution</h3>
+        <span class="muted">처리형 작업</span>
+      </div>
+      <div class="list">
+        ${processingRows.length ? processingRows.map(item => renderDailyCard(item, "processing")).join("") : `<div class="empty">Processing 항목 없음</div>`}
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
         <div>
           <h3>Study</h3>
           <p class="section-subtitle">공부/이론/논문 읽기 등 학습 관련 항목.</p>
@@ -2966,16 +2976,6 @@ function renderRosDaily() {
       </div>
       <div class="list">
         ${studyRows.length ? studyRows.map(item => renderDailyCard(item, "study")).join("") : `<div class="empty">Study 항목 없음</div>`}
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-header">
-        <h3>Processing / Execution</h3>
-        <span class="muted">처리형 작업</span>
-      </div>
-      <div class="list">
-        ${processingRows.length ? processingRows.map(item => renderDailyCard(item, "processing")).join("") : `<div class="empty">Processing 항목 없음</div>`}
       </div>
     </div>
   </section>`;
